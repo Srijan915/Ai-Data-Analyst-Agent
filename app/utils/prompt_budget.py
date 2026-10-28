@@ -32,6 +32,22 @@ def bounded_profile_json(profile):
     return json.dumps(data, indent=2, ensure_ascii=False)
 
 
+def bounded_catalog_json(catalog):
+    """Serialize a catalog while preserving every table/column identifier."""
+    import json
+    data = catalog.model_dump(mode="json")
+    for dataset in data.get("datasets", []):
+        profile = dataset.get("profile", {})
+        for row in profile.get("sample_rows", []):
+            for key, value in row.items():
+                row[key] = shorten_value(value)
+        for column in profile.get("columns", []):
+            for key in ("min", "max"):
+                if key in column:
+                    column[key] = shorten_value(column[key])
+    return json.dumps(data, indent=2, ensure_ascii=False)
+
+
 def ensure_prompt_size(prompt, system_prompt=None):
     if len(prompt) + len(system_prompt or "") > config.max_prompt_chars:
         raise PromptBudgetError(

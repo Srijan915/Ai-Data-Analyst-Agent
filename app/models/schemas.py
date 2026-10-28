@@ -59,6 +59,40 @@ class DatasetProfile(BaseModel):
         return [c.name for c in self.columns]
 
 
+class DatasetMetadata(BaseModel):
+    """Session-local metadata for one uploaded, materialized CSV table."""
+
+    dataset_id: str
+    filename: str
+    table_name: str
+    uploaded_at: str
+    row_count: int
+    profile: DatasetProfile
+
+
+class RelationshipSuggestion(BaseModel):
+    """A proposed relationship; it is never used until confirmed."""
+
+    left_table: str
+    left_column: str
+    right_table: str
+    right_column: str
+    confidence: Literal["low", "medium", "high"]
+    overlap_percentage: float
+    status: Literal["suggested", "confirmed", "rejected"] = "suggested"
+
+
+class CatalogProfile(BaseModel):
+    """Bounded schema context for a set of isolated session tables."""
+
+    datasets: List[DatasetMetadata]
+    relationships: List[RelationshipSuggestion] = Field(default_factory=list)
+
+    @property
+    def table_names(self) -> List[str]:
+        return [dataset.table_name for dataset in self.datasets]
+
+
 class ValidationError(BaseModel):
     """A single reason a SQL statement was rejected by the security layer."""
 

@@ -15,4 +15,6 @@ jobs:
         with:
           python-version: '3.11'
       - name: Check public server health without credentials or AI requests
+        env:
+          DEPLOYMENT_HEALTH_URL: ${{ vars.DEPLOYMENT_HEALTH_URL }}
         run: python scripts/check_deployment.py

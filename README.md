@@ -2,11 +2,11 @@
 
 [![Test](https://github.com/Dark-Frost009/ai-data-analyst-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Dark-Frost009/ai-data-analyst-agent/actions/workflows/ci.yml)
 
-[**Open the live demo**](https://groq-data-analyst.streamlit.app/) — access code required.
+The optional hosted demo configuration is historical; validate the current deployment before relying on it.
 
 An AI-powered data analysis application that allows users to upload CSV datasets and ask analytical questions using natural language.
 
-The application converts natural-language questions into DuckDB-compatible SQL using Groq, validates the generated SQL through an independent security layer, executes the validated query with DuckDB, and presents the results with tables, visualizations, and AI-generated explanations.
+The application converts natural-language questions into DuckDB-compatible SQL using Gemini, validates the generated SQL through an independent security layer, executes the validated query with DuckDB, and presents the results with tables, visualizations, and AI-generated explanations.
 
 ---
 
@@ -96,11 +96,37 @@ automatically reset when the active dataset changes. It is not durable
 storage, and every new SQL statement still passes the full validation and
 execution pipeline.
 
+### Bounded correction and verification
+
+Malformed planner output can receive at most one model-assisted repair (set
+`MAX_SQL_CORRECTION_ATTEMPTS` to adjust this). Every repaired statement passes
+the same SQLGlot table/function/limit validation before execution. The app also
+checks result metadata, labels empty or truncated results, and withholds an
+AI explanation that contains numeric claims not present in the returned data.
+
+Run the deterministic, no-network 50-case safety benchmark with:
+
+```powershell
+python -c "from app.core.offline_benchmark import run_offline_benchmark; print(run_offline_benchmark())"
+```
+
+It measures fixed-fixture answerability and SQL safety behavior; it does not
+claim live Gemini accuracy.
+
+### 📚 Multi-CSV sessions
+
+The sidebar accepts one or more CSV files. Each file is validated under the
+same upload, parsing, row, timeout and temporary-storage limits, then receives
+a session-private, collision-resistant DuckDB table name. Duplicate filenames
+remain distinct. The active table list is shown in the sidebar and all data is
+deleted when the session dataset is cleared. Relationship matches are only
+suggestions: the planner must not join tables until a relationship is confirmed.
+
 ---
 
 ### 🧠 AI-Powered SQL Generation
 
-The application uses **Groq** to translate natural-language analytical questions into DuckDB-compatible SQL.
+The application uses **Gemini** to translate natural-language analytical questions into DuckDB-compatible SQL.
 
 The Query Planner:
 
@@ -301,7 +327,7 @@ The application follows a controlled pipeline that separates data processing, AI
                            ▼
                   ┌─────────────────┐
                   │  Query Planner  │
-                  │      Groq       │
+                  │     Gemini      │
                   └────────┬────────┘
                            │
                            ▼
@@ -347,7 +373,7 @@ The application follows a controlled pipeline that separates data processing, AI
    successful turns in the same browser session.
 5. The agent prepares a typed copy and re-profiles it; the Query Planner receives
    the question and execution profile.
-6. Groq generates a DuckDB-compatible SQL query.
+6. Gemini generates a DuckDB-compatible SQL query.
 7. The generated SQL is treated as untrusted input.
 8. SQLGlot parses and validates the SQL.
 9. Security rules verify that the query is read-only and accesses only approved resources.
@@ -693,8 +719,6 @@ ai-data-analyst-agent/
 ├── .gitignore
 ├── .streamlit/
 │   └── config.toml
-├── .dockerignore
-├── Dockerfile
 ├── pytest.ini
 ├── requirements.txt
 └── README.md
@@ -708,8 +732,8 @@ ai-data-analyst-agent/
 |---|---|
 | **Python** | Core application language |
 | **Streamlit** | Web application interface |
-| **Groq** | LLM inference and SQL generation |
-| **GPT-OSS 20B (configurable)** | Initial Groq model |
+| **Gemini** | LLM inference and SQL generation |
+| **gemini-2.5-flash (configurable)** | Default Gemini model |
 | **DuckDB** | Local analytical SQL execution |
 | **SQLGlot** | SQL parsing and security validation |
 | **Pandas** | Dataset processing |
@@ -766,7 +790,7 @@ pip install -r requirements.txt
 
 ## 🔑 Environment Configuration
 
-The app uses Groq through the provider-independent `LLMClient` interface. No
+The app uses Gemini through the provider-independent `LLMClient` interface. No
 AWS account, SDK, credential file, region or role is required.
 
 For local development copy `.env.example` to `.env`, then enter your key
@@ -774,36 +798,34 @@ privately in that ignored file. Never paste credentials into chat or commit them
 Startup, CSV uploads and offline tests work without a key; analysis needs one.
 
 ```text
-LLM_PROVIDER=groq
-LLM_MODEL_ID=openai/gpt-oss-20b
-GROQ_API_KEY=
+LLM_PROVIDER=gemini
+LLM_MODEL_ID=gemini-2.5-flash
+GEMINI_API_KEY=
 APP_ENV=development
 APP_ACCESS_PASSWORD=
 ```
 
-`openai/gpt-oss-20b` was listed as a production model and in the free-plan
-limits on September 7, 2026. The default is configurable, and availability
-must be checked for your account before a live demo. The published free
-limits at that check were 30 requests/minute, 1,000 requests/day, 8,000
-tokens/minute and 200,000 tokens/day. Your console limits take precedence.
-Sources: [models](https://console.groq.com/docs/models) and
-[rate limits](https://console.groq.com/docs/rate-limits).
+The default model is configurable, and availability must be checked for your
+account before a live demo. Gemini quotas and supported models can change;
+your account console limits take precedence. See
+[Gemini API documentation](https://ai.google.dev/gemini-api/docs) for current
+model availability and account limits.
 
 Free quotas are limited. A successful analysis normally makes two requests
 (planning and explanation), with prompts and completion budgets consuming
 quota. The adapter has no automatic retries, paid-provider fallback, tools,
 or automatic model substitution. Quota exhaustion requires trying later.
-For GPT-OSS it requests low reasoning effort and excludes reasoning from the
-returned answer; completion budgets are 2,048 for planning and 1,024 for
-explanations. Truncated completions fail safely. These choices have offline
-contract tests, not a live model-accuracy claim.
-[Groq SDK](https://github.com/groq/groq-python),
-[reasoning options](https://console.groq.com/docs/reasoning).
+Completion budgets are 2,048 for planning and 1,024 for explanations.
+Truncated completions fail safely. These choices have offline contract tests,
+not a live model-accuracy claim.
+[Google Gen AI SDK](https://github.com/googleapis/python-genai).
 
 Other settings and defaults are in `.env.example`: upload/result size,
 query timeout, one concurrent analysis per process, DuckDB memory/thread
-limits, and provider connect/read timeouts. Only `groq` is implemented;
-other provider names fail explicitly.
+limits, and provider timeouts. Only `gemini` is implemented; other provider
+names fail explicitly. Gemini receives one combined SDK request timeout; the
+configured connect/read values are added because this SDK version does not
+expose separate controls. `HttpRetryOptions(attempts=1)` performs no retry.
 
 ## ▶️ Running locally
 
@@ -814,24 +836,31 @@ python -m streamlit run app/main.py
 Open [localhost:8501](http://localhost:8501). Local development can omit the
 access password; shared deployments must set it.
 
-## ☁️ Streamlit Community Cloud
+## ☁️ Direct Streamlit deployment
 
-Use this repository, branch `main`, entry point `app/main.py`, and Python
-3.11. In the application's **Advanced settings → Secrets** (or its settings
-for an existing app), enter top-level TOML values privately:
+This project intentionally uses a direct Python/Streamlit deployment, not a
+container image. Its existing layout is compatible with Streamlit Community
+Cloud: `requirements.txt` and `.streamlit/config.toml` are at the repository
+root, and the entry point is `app/main.py`.
+
+To deploy with Streamlit Community Cloud after an approved commit, create an
+app, select this repository and the branch you intend to release, set the
+entry point to `app/main.py`, and select Python 3.13 in **Advanced settings**
+to match the verified environment. Configure these top-level values privately
+in **Advanced settings → Secrets**:
 
 ```toml
 APP_ENV = "production"
 APP_ACCESS_PASSWORD = "replace-with-your-private-demo-password"
-GROQ_API_KEY = "replace-with-your-private-groq-key"
-LLM_PROVIDER = "groq"
-LLM_MODEL_ID = "openai/gpt-oss-20b"
+GEMINI_API_KEY = "replace-with-your-private-gemini-key"
+LLM_PROVIDER = "gemini"
+LLM_MODEL_ID = "gemini-2.5-flash"
 MAX_CONCURRENT_ANALYSES = "1"
 ```
 
-These are placeholders, not working credentials. Top-level secrets become
-environment variables. Never commit `.streamlit/secrets.toml`. Restart the
-app after changing settings. In production a missing password locks the
+These are placeholders, not working credentials. Community Cloud makes these
+top-level values available as environment variables. Never commit
+`.streamlit/secrets.toml`. In production a missing password locks the
 interface; retain this gate for the shared demo. It is a shared access code,
 not individual accounts or tenant isolation.
 [Streamlit secrets guide](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management),
@@ -840,20 +869,11 @@ not individual accounts or tenant isolation.
 After configuring privately, use the synthetic evaluation CSV under
 `tests/fixtures/` to check real answers against the expected results. Model
 access, actual response quality, latency and account quotas need this live
-check; passing offline tests cannot establish them.
-
-## 🐳 Running with Docker
-
-```powershell
-docker build -t ai-data-analyst-agent .
-docker run --rm -p 8501:8501 --env-file .env ai-data-analyst-agent
-```
-
-Create your private `.env` first. For a shared container set
-`APP_ENV=production` and `APP_ACCESS_PASSWORD`. Do not mount any cloud
-credential directories. The image runs as a non-root user, excludes local
-secrets/data, and checks `/_stcore/health`. Open
-[localhost:8501](http://localhost:8501).
+check; passing offline tests cannot establish them. No hosted URL is claimed
+until those checks are completed. Other managed Streamlit hosts can use the
+same direct setup when they support Python 3.13, install `requirements.txt`,
+run `streamlit run app/main.py`, and securely inject the listed environment
+variables.
 
 ---
 
@@ -874,7 +894,7 @@ The offline semantic fixtures are in `tests/fixtures/analysis.csv` and
 `analysis_cases.json`. Their response SQL is handwritten; expected rows are
 checked through the real planner, security validator and DuckDB executor.
 They cover counting, aggregate ranking, monetary/year filters, string
-literals and empty results. They do not measure Groq's question-to-SQL
+literals and empty results. They do not measure Gemini's question-to-SQL
 accuracy. The UI tests stub the unsupported AppTest upload widget boundary
 and remote model, while exercising CSV parsing, analysis buttons, results,
 charts, all seven error branches, replacement and reset behavior.
@@ -910,12 +930,12 @@ streamlit run app/main.py
 ```
 
 Useful manual checks include replacing an uploaded CSV with another file of
-the same name, clearing the active dataset, an unavailable Groq service,
+the same name, clearing the active dataset, an unavailable Gemini service,
 and a query that reaches the configured result limit.
 
-GitHub Actions runs automatically on every push and pull request. It executes
-the test suite with the coverage floor, builds the Docker image, starts the
-container, and waits for Docker to report it as healthy.
+GitHub Actions runs automatically on every push and pull request. It installs
+the pinned Python dependencies, checks known advisories, and runs the full
+test suite with the coverage floor.
 
 ---
 
@@ -925,11 +945,12 @@ See [OPERATIONS.md](OPERATIONS.md) for production defaults, quota controls,
 health monitoring, crash cleanup, smoke tests and rollback instructions.
 
 - Keep `APP_ENV=production` and a strong private `APP_ACCESS_PASSWORD`.
-- Set `GROQ_API_KEY` privately and verify the model in your account.
-- Run `pytest -q` on Python 3.11 and review the live synthetic-data answers.
+- Set `GEMINI_API_KEY` privately and verify the model in your account.
+- Run `pytest -q` on Python 3.13 and review the live synthetic-data answers.
 - Check resource limits and quota before sharing the demo.
-- For Docker hosting, build and verify the container health endpoint.
-- Use only data you are authorized to send to the hosting service and Groq.
+- Configure `DEPLOYMENT_HEALTH_URL` only after a hosted health endpoint is
+  available; the repository health probe skips when it is unset.
+- Use only data you are authorized to send to the hosting service and Gemini.
 
 No deployment or account changes are performed by the offline test suite.
 
@@ -1006,7 +1027,7 @@ The application is designed for analytical workloads and does not modify the und
 ## 🔒 Data & Credential Safety
 
 The CSV is processed in the app host's memory with pandas and restricted
-DuckDB. It is not uploaded as a file to Groq, but **data values do leave the
+DuckDB. It is not uploaded as a file to Gemini, but **data values do leave the
 host when you analyze**:
 
 - Planning sends your question, the execution profile (exact column names,
@@ -1029,7 +1050,7 @@ boundary are independent of prompt content and are not weakened by it.
 
 Use synthetic or non-sensitive data for the demo. No automatic redaction
 or provider data-retention guarantee is implemented. Review the provider's
-[Your Data documentation](https://console.groq.com/docs/your-data) for your
+[Gemini API data use documentation](https://ai.google.dev/gemini-api/terms) for your
 account before uploading sensitive material. Server logs may include SQL,
 filenames, normalized headers and execution diagnostics; protect log access.
 The adapter does not log API keys or raw provider response bodies.
@@ -1140,18 +1161,14 @@ https://github.com/Dark-Frost009
 
 ## 📌 Project Status
 
-**Deployed on Streamlit Community Cloud with Groq and a shared password gate.**
-
-- Live app: [groq-data-analyst.streamlit.app](https://groq-data-analyst.streamlit.app/).
-- Local validation (October 2, 2026): **468 tests passed** on Python 3.12.7 with the patched dependencies and production safeguards, with **89.12% coverage** in the actual repository. Detailed release checks are recorded in OPERATIONS.md. The earlier review-fix batch passed 436 tests with 89.55% coverage. The previous typed-execution release passed 387 tests with 88.97% coverage.
-- [GitHub Actions validation](https://github.com/Dark-Frost009/ai-data-analyst-agent/actions/runs/36924788796) passed Python 3.11 tests and Docker build/startup health checks for the typed-execution fix, commit `fb16dba`.
-- Local execution against `Messy_Employee_dataset.csv` returned 445 rows for employees joining after 2022; the user confirmed the deployed date fix works. The latest release includes project-review fixes, large-file support and production operation safeguards; see the release verification record for hosted status.
-- A manual live check using the bundled synthetic CSV returned the expected artists **A and C** for “Which artists in year 2015 had gross over $5 million?” The public password gate was also checked independently.
-
-This is a deployment smoke check, not a comprehensive model-accuracy evaluation.
-Offline fixtures use fixed model responses and validate the surrounding pipeline.
-Run `pytest -q` for current local results. Remaining work includes individual
-user accounts, durable query history and production monitoring.
+The Gemini and multi-dataset changes are locally verified, but no current
+hosted deployment is claimed. On October 28, 2026, a fresh Python 3.13
+environment installed the pinned requirements cleanly; `pip check` passed and
+the full suite passed **480 tests** with **85.77% coverage**. The deterministic
+offline benchmark passed **50/50** cases. These checks do not make a Gemini API
+request or validate a hosted service. Live-provider and hosted-service
+verification must be recorded separately before a release or deployment is
+claimed.
 
 
 ### Production operations
@@ -1160,7 +1177,7 @@ AI requests are capped at 60 per hour per process (`MAX_LLM_REQUESTS_PER_HOUR`),
 including planning and explanation attempts. Provider quotas can be stricter.
 Failed provider calls are not retried automatically, and credential/access/quota
 failures have fixed user-facing messages. Logs include safe status, timings and
-reported token counts without private request contents. Docker defaults to
-production and requires an access code. GitHub checks dependencies against OSV;
-existing Dependabot updates remain enabled. A separate workflow probes the
-hosted server every 30 minutes without credentials or AI calls.
+reported token counts without private request contents. Production requires an
+access code. GitHub checks dependencies against OSV; existing Dependabot
+updates remain enabled. A separate workflow probes the hosted server every 30
+minutes without credentials or AI calls.

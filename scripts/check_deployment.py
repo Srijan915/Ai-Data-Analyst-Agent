@@ -1,11 +1,15 @@
 """Small, unauthenticated availability probe; never submits data or spends tokens."""
-import urllib.request
+import os
 import http.cookiejar
+import urllib.request
 
-URL = "https://groq-data-analyst.streamlit.app/~/+/_stcore/health"
+URL = os.environ.get("DEPLOYMENT_HEALTH_URL", "").strip()
 
 
 def main():
+    if not URL:
+        print("Deployment health check skipped: DEPLOYMENT_HEALTH_URL is not configured.")
+        return
     request = urllib.request.Request(URL, headers={"User-Agent": "AI-Analyst-Healthcheck/1"})
     # Community Cloud redirects may establish a routing cookie first.
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))

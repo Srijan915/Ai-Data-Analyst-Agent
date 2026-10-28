@@ -119,6 +119,8 @@ def _initialize_session_state() -> None:
 
     if "dataset_profile" not in st.session_state:
         st.session_state.dataset_profile = None
+    if "dataset_catalog" not in st.session_state:
+        st.session_state.dataset_catalog = None
 
     if "upload_error" not in st.session_state:
         st.session_state.upload_error = False
@@ -209,6 +211,7 @@ def _clear_dataset() -> None:
     st.session_state.failed_upload_signature = None
     st.session_state.dataframe = None
     st.session_state.dataset_profile = None
+    st.session_state.dataset_catalog = None
     st.session_state.agent = None
     st.session_state.last_result = None
     st.session_state.uploaded_filename = None
@@ -345,6 +348,118 @@ def _load_uploaded_file(
         f"**{st.session_state.uploaded_filename}** "
         f"({dataset_profile.row_count:,} rows × {dataset_profile.column_count} columns)."
     )
+
+
+def _load_multiple_files(uploaded_files, upload_signature: tuple) -> None:
+    """Atomically replace the session catalog after all CSVs validate."""
+    from app.core.dataset_catalog import DatasetCatalog
+
+    st.session_state.upload_error = True
+    st.session_state.failed_upload_signature = upload_signature
+    st.session_state.last_result = None
+    st.session_state.conversation_history = []
+    catalog = DatasetCatalog()
+    try:
+        status = st.empty()
+        try:
+            records = [catalog.add(item, getattr(item, "name", "upload.csv"), progress=status.caption) for item in uploaded_files]
+        finally:
+            status.empty()
+        if not records:
+            raise DataLoaderError("Select at least one CSV file.")
+        first = records[0]
+        dataframe = pd.DataFrame(first.profile.sample_rows, columns=first.profile.column_names)
+        agent = DataAnalystAgent(
+            dataframe=dataframe,
+            dataset_profile=catalog.profile,
+            max_result_rows=config.max_query_result_rows,
+            dataset_catalog=catalog,
+        )
+    except (DatasetResourceError, DataLoaderError, CSVEncodingError, CSVParsingError, EmptyFileError, FileTooLargeError) as exc:
+        catalog.close()
+        st.error(f"❌ Could not load the selected CSV files: {exc}")
+        return
+    except Exception:
+        catalog.close()
+        logger.exception("Unexpected error while preparing dataset catalog")
+        st.error("❌ An unexpected error occurred while preparing the selected datasets.")
+        return
+    previous_agent = st.session_state.agent
+    if previous_agent is not None:
+        previous_agent.release_dataset()
+    st.session_state.upload_error = False
+    st.session_state.failed_upload_signature = None
+    st.session_state.dataframe = dataframe
+    st.session_state.dataset_profile = first.profile
+    st.session_state.dataset_catalog = catalog
+    st.session_state.agent = agent
+    st.session_state.last_result = None
+    st.session_state.conversation_history = []
+    st.session_state.uploaded_filename = f"{len(records)} datasets"
+    st.session_state.uploaded_file_signature = upload_signature
+    st.success(f"✅ Loaded {len(records)} isolated CSV datasets. Confirm a suggested relationship before asking for a join.")
+
+
+def _refresh_catalog_session() -> None:
+    """Update UI/agent views after a safe catalog mutation."""
+    catalog = st.session_state.dataset_catalog
+    records = catalog.profile.datasets
+    if not records:
+        _clear_dataset()
+        return
+    first = records[0]
+    dataframe = pd.DataFrame(first.profile.sample_rows, columns=first.profile.column_names)
+    st.session_state.agent.refresh_catalog(dataframe)
+    st.session_state.dataframe = dataframe
+    st.session_state.dataset_profile = first.profile
+    st.session_state.uploaded_filename = f"{len(records)} datasets"
+    st.session_state.last_result = None
+    st.session_state.conversation_history = []
+
+
+def _render_catalog_controls() -> None:
+    """Render per-dataset removal/replacement controls for the active session."""
+    catalog = st.session_state.dataset_catalog
+    if catalog is None:
+        return
+    records = catalog.profile.datasets
+    st.caption("Active session datasets")
+    for record in records:
+        st.caption(f"• `{record.table_name}` — {record.filename} ({record.row_count:,} rows)")
+    selected_id = st.selectbox(
+        "Manage dataset",
+        options=[record.dataset_id for record in records],
+        format_func=lambda item: next(record.filename for record in records if record.dataset_id == item),
+        key="catalog_selected_dataset",
+    )
+    selected = next(record for record in records if record.dataset_id == selected_id)
+    replacement = st.file_uploader(
+        "Replacement CSV",
+        type=["csv"],
+        key=f"catalog_replace_{selected.dataset_id}",
+    )
+    first_col, second_col = st.columns(2)
+    with first_col:
+        if st.button("Remove selected", use_container_width=True):
+            catalog.remove(selected_id)
+            _refresh_catalog_session()
+            st.rerun()
+    with second_col:
+        if st.button("Replace selected", disabled=replacement is None, use_container_width=True):
+            try:
+                status = st.empty()
+                try:
+                    catalog.replace(selected_id, replacement, getattr(replacement, "name", selected.filename), progress=status.caption)
+                finally:
+                    status.empty()
+                _refresh_catalog_session()
+                st.success("✅ Dataset replaced. Schema and relationship suggestions were refreshed.")
+                st.rerun()
+            except (DatasetResourceError, DataLoaderError, CSVEncodingError, CSVParsingError, EmptyFileError, FileTooLargeError) as exc:
+                st.error(f"❌ Replacement was rejected; the existing dataset is unchanged: {exc}")
+            except Exception:
+                logger.exception("Catalog dataset replacement failed")
+                st.error("❌ Replacement failed; the existing dataset is unchanged.")
 
 
 def _display_dataset_overview() -> None:
@@ -816,8 +931,9 @@ def main() -> None:
         )
 
         uploaded_file = st.file_uploader(
-            "Upload a CSV file",
+            "Upload one or more CSV files",
             type=["csv"],
+            accept_multiple_files=True,
             key=f"csv_uploader_{st.session_state.uploader_key_version}",
             help=(
                 f"Maximum upload size: "
@@ -825,11 +941,13 @@ def main() -> None:
             ),
         )
 
-        if uploaded_file is not None:
+        # Streamlit returns a list for multi-file mode. Tests and older
+        # adapters may return one UploadedFile, so normalize both.
+        uploaded_files = uploaded_file if isinstance(uploaded_file, list) else ([uploaded_file] if uploaded_file is not None else [])
 
-            current_upload_signature = _uploaded_file_signature(
-                uploaded_file
-            )
+        if uploaded_files:
+
+            current_upload_signature = tuple(_uploaded_file_signature(item) for item in uploaded_files)
 
             if (
                 current_upload_signature
@@ -837,17 +955,22 @@ def main() -> None:
                 and current_upload_signature != st.session_state.failed_upload_signature
             ):
 
-                _load_uploaded_file(
-                    uploaded_file,
-                    upload_signature=current_upload_signature,
-                )
+                if len(uploaded_files) == 1:
+                    _load_uploaded_file(uploaded_files[0], upload_signature=current_upload_signature)
+                else:
+                    _load_multiple_files(uploaded_files, upload_signature=current_upload_signature)
 
-        if st.session_state.upload_error and uploaded_file is not None:
+        if st.session_state.upload_error and uploaded_files:
             if st.button("Retry selected upload", use_container_width=True):
-                _load_uploaded_file(uploaded_file, _uploaded_file_signature(uploaded_file))
-        if uploaded_file is None:
+                if len(uploaded_files) == 1:
+                    _load_uploaded_file(uploaded_files[0], (_uploaded_file_signature(uploaded_files[0]),))
+                else:
+                    _load_multiple_files(uploaded_files, tuple(_uploaded_file_signature(item) for item in uploaded_files))
+        if not uploaded_files:
             st.session_state.upload_error = False
             st.session_state.failed_upload_signature = None
+
+        _render_catalog_controls()
 
         if st.button(
             "Clear active dataset",
@@ -1002,7 +1125,7 @@ def main() -> None:
 
                     <div class="feature-text">
                         Ask questions in plain English and let
-                        Groq translate them into SQL.
+                        Gemini translate them into SQL.
                     </div>
 
                 </div>
@@ -1042,7 +1165,7 @@ def main() -> None:
                 <span>✨</span>
                 <span>
                     Powered by secure SQL validation, DuckDB,
-                    and Groq.
+                    and Gemini.
                 </span>
             </div>
             """
@@ -1143,7 +1266,7 @@ def main() -> None:
     st.html(
         """
         <div class="app-footer">
-            AI Data Analyst Agent · Secure SQL · DuckDB · Groq
+            AI Data Analyst Agent · Secure SQL · DuckDB · Gemini
         </div>
         """
     )

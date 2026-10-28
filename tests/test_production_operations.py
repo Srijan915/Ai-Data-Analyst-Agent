@@ -33,14 +33,14 @@ def test_hourly_budget_resets_and_counts_concurrent_requests():
 
 def test_exhausted_budget_prevents_provider_request(monkeypatch):
     from app.core import llm_client
-    monkeypatch.setenv('GROQ_API_KEY', 'synthetic-test-only')
+    monkeypatch.setenv('GEMINI_API_KEY', 'synthetic-test-only')
     budget = RequestBudget(1)
     budget.acquire()
     sdk = Mock()
     monkeypatch.setattr(llm_client, 'provider_request_budget', budget)
-    monkeypatch.setattr(llm_client.groq, 'Groq', sdk)
+    monkeypatch.setattr(llm_client.genai, 'Client', sdk)
     with pytest.raises(LLMThrottlingError):
-        llm_client.GroqClient().generate_text('synthetic question')
+        llm_client.GeminiClient().generate_text('synthetic question')
     sdk.assert_not_called()
 
 

@@ -48,6 +48,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 import pandas as pd
 
 from app.core.chart_generator import generate_chart
+from app.core.answerability import Answerability, assess_answerability
 from app.core.data_profiler import profile_dataframe
 from app.core.execution_preparation import prepare_execution_dataframe
 from app.config import config
@@ -55,13 +56,14 @@ from app.core.explainer import ExplainerError, explain_query_result
 from app.core.semantic_checks import SemanticConversionError, check_conversion_fidelity
 from app.utils.dataset_resources import (DatasetResourceError, check_dataframe_limits, dataset_memory_budget, dataset_preparation_slot)
 from app.core.query_planner import QueryInputError, QueryPlanner, QueryPlannerError
+from app.core.result_verifier import explanation_is_grounded, verify_query_result
 from app.core.sql_executor import (
     QueryExecutionError,
     QueryTimeoutError,
     SQLExecutor,
     UnvalidatedSQLError,
 )
-from app.models.schemas import DatasetProfile, QueryResult, ValidationResult
+from app.models.schemas import CatalogProfile, DatasetProfile, QueryResult, ValidationResult
 from app.utils.analysis_capacity import (
     AnalysisCapacityExceededError,
     acquire_analysis_slot,
@@ -212,22 +214,23 @@ class DataAnalystAgent:
     def __init__(
         self,
         dataframe: pd.DataFrame,
-        dataset_profile: DatasetProfile,
+        dataset_profile: DatasetProfile | CatalogProfile,
         query_planner: Optional[QueryPlanner] = None,
         max_result_rows: int = DEFAULT_MAX_RESULT_ROWS,
         max_explanation_rows: int = DEFAULT_MAX_EXPLANATION_ROWS,
         max_chart_rows: int = DEFAULT_MAX_CHART_ROWS,
         max_categories: int = DEFAULT_MAX_CATEGORIES,
         disk_dataset=None,
+        dataset_catalog=None,
     ) -> None:
         if not isinstance(dataframe, pd.DataFrame):
             raise ValueError(
                 "dataframe must be a pandas DataFrame"
             )
 
-        if not isinstance(dataset_profile, DatasetProfile):
+        if not isinstance(dataset_profile, (DatasetProfile, CatalogProfile)):
             raise ValueError(
-                "dataset_profile must be a DatasetProfile"
+                "dataset_profile must be a DatasetProfile or CatalogProfile"
             )
 
         if max_result_rows <= 0:
@@ -254,11 +257,16 @@ class DataAnalystAgent:
         self._dataframe = dataframe
         self._dataset_profile = dataset_profile
         self._disk_dataset = disk_dataset
+        self._dataset_catalog = dataset_catalog
         with dataset_preparation_slot():
             reservation = dataset_memory_budget.reserve(check_dataframe_limits(dataframe))
             try:
                 self._execution_dataframe = (disk_dataset.convert(dataframe) if disk_dataset else prepare_execution_dataframe(dataframe))
-                self._execution_profile = (disk_dataset.execution_profile if disk_dataset else profile_dataframe(self._execution_dataframe))
+                self._execution_profile = (
+                    dataset_catalog.profile if dataset_catalog is not None
+                    else disk_dataset.execution_profile if disk_dataset
+                    else profile_dataframe(self._execution_dataframe)
+                )
             except Exception:
                 reservation.release()
                 raise
@@ -291,6 +299,26 @@ class DataAnalystAgent:
         self._memory_finalizer()
         if self._disk_dataset is not None:
             self._disk_dataset.close()
+        if self._dataset_catalog is not None:
+            self._dataset_catalog.close()
+
+    def refresh_catalog(self, dataframe: pd.DataFrame) -> None:
+        """Refresh session-local schema after a catalog mutation.
+
+        Catalog ownership remains with this agent, so replacing/removing a
+        table cannot accidentally close another active session's files.
+        """
+        if self._dataset_catalog is None:
+            raise AgentDataError("This agent does not own a dataset catalog.")
+        if not isinstance(dataframe, pd.DataFrame):
+            raise ValueError("dataframe must be a pandas DataFrame")
+        profile = self._dataset_catalog.profile
+        if not profile.datasets:
+            raise AgentDataError("No datasets remain in this session.")
+        self._dataframe = dataframe
+        self._execution_dataframe = dataframe
+        self._dataset_profile = profile
+        self._execution_profile = profile
 
     @property
     def dataframe(self) -> pd.DataFrame:
@@ -384,6 +412,14 @@ class DataAnalystAgent:
             raise AgentDataError("This dataset has been cleared. Upload it again before analyzing.")
         question = question.strip()
 
+        # The legacy single-table path remains compatible with existing
+        # planner behavior. Multi-table requests need a deterministic gate so
+        # an unconfirmed inferred relationship can never become a join.
+        if self._dataset_catalog is not None:
+            answerability = assess_answerability(question, self._execution_profile)
+            if answerability.outcome != Answerability.ANSWERABLE:
+                raise AgentDataError(answerability.message)
+
         logger.info(
             "Starting agent run | question_length=%d",
             len(question),
@@ -436,20 +472,23 @@ class DataAnalystAgent:
         # 2. SQL executor + security validation
         # ------------------------------------------------------------------
 
-        if self._disk_dataset is not None:
+        if self._dataset_catalog is not None:
+            from app.core.dataset_catalog import CatalogSQLExecutor
+            execution_context = CatalogSQLExecutor(self._dataset_catalog, self._max_result_rows)
+        elif self._disk_dataset is not None:
             from app.core.disk_dataset import DiskSQLExecutor
             execution_context = DiskSQLExecutor(self._disk_dataset, self._max_result_rows)
         else:
             execution_context = SQLExecutor(self._execution_dataframe, max_result_rows=self._max_result_rows)
         with execution_context as executor:
 
-            table_name = executor.table_name
+            table_names = executor.table_names if self._dataset_catalog is not None else [executor.table_name]
 
             validation_started_at = perf_counter()
 
             validation = validate_sql(
                 sql=sql,
-                allowed_tables=[table_name],
+                allowed_tables=table_names,
                 max_rows=self._max_result_rows,
             )
 
@@ -510,7 +549,11 @@ class DataAnalystAgent:
             # ----------------------------------------------------------------
 
             try:
-                if self._disk_dataset is not None:
+                if self._dataset_catalog is not None:
+                    # Each catalog table was typed during trusted upload
+                    # preparation; model output still goes through SQLGlot.
+                    pass
+                elif self._disk_dataset is not None:
                     self._disk_dataset.check_conversions(validation.cleaned_sql)
                 else:
                     check_conversion_fidelity(validation.cleaned_sql, self._execution_dataframe)
@@ -550,6 +593,12 @@ class DataAnalystAgent:
                     "SQL executor returned an invalid QueryResult."
                 )
 
+            try:
+                verification = verify_query_result(query_result)
+            except (TypeError, ValueError) as exc:
+                logger.warning("Result verification failed: %s", type(exc).__name__)
+                raise AgentExecutionError("The query result could not be verified safely.") from None
+
             logger.info(
                 "SQL execution completed | duration_ms=%.1f | rows=%d | "
                 "truncated=%s",
@@ -563,7 +612,7 @@ class DataAnalystAgent:
             # ----------------------------------------------------------------
 
             explanation: Optional[str] = None
-            warnings: list[str] = []
+            warnings: list[str] = list(verification.warnings)
 
             if generate_explanation:
                 explanation_started_at = perf_counter()
@@ -591,10 +640,17 @@ class DataAnalystAgent:
                         (perf_counter() - explanation_started_at) * 1000,
                     )
                 else:
-                    logger.info(
-                        "Explanation generation completed | duration_ms=%.1f",
-                        (perf_counter() - explanation_started_at) * 1000,
-                    )
+                    if explanation_is_grounded(explanation, query_result):
+                        logger.info(
+                            "Explanation generation completed | duration_ms=%.1f",
+                            (perf_counter() - explanation_started_at) * 1000,
+                        )
+                    else:
+                        explanation = None
+                        warnings.append(
+                            "The generated explanation contained unsupported numeric claims and was withheld."
+                        )
+                        logger.warning("Explanation withheld by result grounding check")
 
             # ----------------------------------------------------------------
             # 5. Chart generation

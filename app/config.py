@@ -13,8 +13,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load variables from a local .env file if present. In real deployments
-# (containers, cloud platforms, CI) environment variables are injected
+# Load variables from a local .env file if present. In cloud platforms and CI,
+# environment variables are injected
 # directly, so a missing .env file here is expected and not an error.
 load_dotenv()
 
@@ -44,11 +44,11 @@ class AppConfig:
     log_level: str = "INFO"
 
     # --- Language model (credentials are resolved only by the adapter) ---
-    llm_provider: str = "groq"
-    llm_model_id: str = "openai/gpt-oss-20b"
+    # --- Language model (credentials are resolved only by the adapter) ---
+    llm_provider: str = "gemini"
+    llm_model_id: str = "gemini-2.5-flash"
     llm_connect_timeout_seconds: int = 5
     llm_read_timeout_seconds: int = 45
-
     # --- Data & query limits ---
     # Shared limits enforced by the loader, executor and capacity guard.
     max_upload_size_mb: int = 100
@@ -67,6 +67,7 @@ class AppConfig:
     query_timeout_seconds: int = 30
     max_concurrent_analyses: int = 1
     max_llm_requests_per_hour: int = 60
+    max_sql_correction_attempts: int = 1
 
     # --- SQL execution (DuckDB) resource limits ---
     # Defense-in-depth alongside utils/security.py's SQL-level checks —
@@ -79,6 +80,7 @@ class AppConfig:
         """Fail fast when deployment configuration is invalid."""
         positive_values = {
             "max_llm_requests_per_hour": self.max_llm_requests_per_hour,
+            "max_sql_correction_attempts": self.max_sql_correction_attempts,
             "max_disk_dataset_rows": self.max_disk_dataset_rows,
             "max_dataset_disk_mb": self.max_dataset_disk_mb,
             "max_total_dataset_disk_mb": self.max_total_dataset_disk_mb,
@@ -125,6 +127,7 @@ class AppConfig:
         """Build config from environment variables, using dataclass defaults as fallbacks."""
         return cls(
             max_llm_requests_per_hour=_get_int("MAX_LLM_REQUESTS_PER_HOUR", cls.max_llm_requests_per_hour),
+            max_sql_correction_attempts=_get_int("MAX_SQL_CORRECTION_ATTEMPTS", cls.max_sql_correction_attempts),
             max_disk_dataset_rows=_get_int("MAX_DISK_DATASET_ROWS", cls.max_disk_dataset_rows),
             max_dataset_disk_mb=_get_int("MAX_DATASET_DISK_MB", cls.max_dataset_disk_mb),
             max_total_dataset_disk_mb=_get_int("MAX_TOTAL_DATASET_DISK_MB", cls.max_total_dataset_disk_mb),
