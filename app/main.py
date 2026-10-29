@@ -32,6 +32,7 @@ Business logic remains inside app.core.
 """
 
 import hmac
+import html
 import os
 import sys
 from pathlib import Path
@@ -78,6 +79,11 @@ from app.core.data_loader import (
     load_csv,
 )
 from app.core.data_profiler import profile_dataframe
+from app.core.chart_generator import (
+    classify_dataset_columns,
+    generate_dataset_auto_visualizations,
+    build_custom_dataset_figure,
+)
 from app.core.query_planner import MAX_CONVERSATION_TURNS
 from app.utils.logger import get_logger
 from app.utils.dataset_resources import DatasetResourceError, dataset_preparation_slot
@@ -106,10 +112,130 @@ st.set_page_config(
 
 st.html("<style>" + (PROJECT_ROOT / "app/ui/styles.css").read_text(encoding="utf-8") + "</style>")
 
+PLOTLY_COLORWAY = [
+    "#0EA5E9",  # Electric sky / teal
+    "#06B6D4",  # Cyan
+    "#6366F1",  # Indigo
+    "#10B981",  # Emerald
+    "#F59E0B",  # Amber
+    "#8B5CF6",  # Violet
+    "#EC4899",  # Pink
+]
+
 
 # --------------------------------------------------------------------------
 # Helper functions
 # --------------------------------------------------------------------------
+
+def _style_plotly_figure(fig):
+    """Apply the workspace dark analytics chart theme without changing plotted data."""
+
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(15, 23, 42, 0.55)",
+        font=dict(
+            color="#94A3B8",
+            size=12,
+            family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif",
+        ),
+        colorway=PLOTLY_COLORWAY,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.22,
+            xanchor="center",
+            x=0.5,
+            font=dict(color="#CBD5E1", size=11),
+        ),
+        margin=dict(t=16, b=64, l=16, r=16),
+        autosize=True,
+        title=None,
+        hoverlabel=dict(
+            bgcolor="#0F172A",
+            bordercolor="#0EA5E9",
+            font=dict(color="#F8FAFC", size=12),
+        ),
+    )
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="rgba(255, 255, 255, 0.07)",
+        zeroline=False,
+        tickfont=dict(color="#94A3B8"),
+        title_font=dict(color="#CBD5E1"),
+    )
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="rgba(255, 255, 255, 0.07)",
+        zeroline=False,
+        tickfont=dict(color="#94A3B8"),
+        title_font=dict(color="#CBD5E1"),
+    )
+    return fig
+
+
+def _get_suggested_questions(profile) -> list[str]:
+    """Generate contextual example questions from the active dataset profile."""
+    if profile is None or not getattr(profile, "columns", None):
+        return [
+            "What are the top 10 records by value?",
+            "Summarize the key metrics across this dataset",
+            "Show distribution and breakdown by category",
+        ]
+
+    cols = profile.columns
+    numeric_candidates = [
+        c.name for c in cols
+        if str(c.inferred_type).lower() in ("integer", "float", "numeric", "decimal")
+        or any(k in c.name.lower() for k in ("sales", "revenue", "price", "amount", "total", "cost", "score", "count", "profit", "qty", "quantity"))
+    ]
+    cat_candidates = [
+        c.name for c in cols
+        if c.name not in numeric_candidates
+        and (str(c.inferred_type).lower() in ("string", "category", "text") or c.unique_count <= 250)
+    ]
+
+    suggestions = []
+    if numeric_candidates and cat_candidates:
+        suggestions.append(f"Top 5 {cat_candidates[0]} by total {numeric_candidates[0]}")
+        if len(numeric_candidates) > 1:
+            suggestions.append(f"Compare {numeric_candidates[0]} & {numeric_candidates[1]} by {cat_candidates[0]}")
+        elif len(cat_candidates) > 1:
+            suggestions.append(f"Average {numeric_candidates[0]} grouped by {cat_candidates[1]}")
+        else:
+            suggestions.append(f"Total {numeric_candidates[0]} breakdown by {cat_candidates[0]}")
+    elif numeric_candidates:
+        suggestions.append(f"Top 10 records with highest {numeric_candidates[0]}")
+        suggestions.append(f"Total and average {numeric_candidates[0]}")
+    elif cat_candidates:
+        suggestions.append(f"Most frequent {cat_candidates[0]} values")
+        suggestions.append(f"Count of records grouped by {cat_candidates[0]}")
+
+    fallbacks = [
+        "Top 10 records by highest values",
+        "Summary breakdown of key metrics",
+        "Distribution and outlier breakdown",
+    ]
+    for fb in fallbacks:
+        if len(suggestions) < 3 and fb not in suggestions:
+            suggestions.append(fb)
+
+    return suggestions[:3]
+
+
+def _apply_suggested_question(query: str) -> None:
+    """Stage a suggested question to be loaded into query_input_composer on rerun."""
+    st.session_state.pending_query = query
+
+
+def _workspace_status() -> tuple[str, str, str]:
+    """Return sidebar status copy, CSS modifier, and header chip class."""
+
+    if st.session_state.get("upload_error"):
+        return "Paused", "is-paused", "status-chip--paused"
+    if st.session_state.get("dataframe") is not None:
+        return "Ready", "is-ready", "status-chip--ready"
+    return "No dataset", "", "status-chip--empty"
+
 
 def _initialize_session_state() -> None:
     """Initialize Streamlit session-state values."""
@@ -145,6 +271,9 @@ def _initialize_session_state() -> None:
     if "conversation_history" not in st.session_state:
         st.session_state.conversation_history = []
 
+    if "pending_query" not in st.session_state:
+        st.session_state.pending_query = None
+
     if "demo_access_granted" not in st.session_state:
         st.session_state.demo_access_granted = False
 
@@ -165,31 +294,41 @@ def _render_public_demo_access_gate() -> bool:
     if st.session_state.demo_access_granted:
         return True
 
+    st.html(
+        """
+        <div class="access-card">
+            <div class="access-icon">🔒</div>
+            <div class="hero-eyebrow">PROTECTED WORKSPACE</div>
+        </div>
+        """
+    )
     st.title("🔒 Private Portfolio Demo")
     st.caption(
         "This demo is access-controlled to protect the AI service quota "
         "used for analysis."
     )
 
-    access_password = st.text_input(
-        "Demo access code",
-        type="password",
-        key="demo_access_password",
-    )
+    access_col, _ = st.columns([1, 1])
+    with access_col:
+        access_password = st.text_input(
+            "Demo access code",
+            type="password",
+            key="demo_access_password",
+        )
 
-    if st.button(
-        "Unlock demo",
-        type="primary",
-        use_container_width=True,
-    ):
-        if hmac.compare_digest(access_password, expected_password):
-            st.session_state.demo_access_granted = True
-            st.session_state.pop("demo_access_password", None)
-            logger.info("Portfolio demo access granted")
-            st.rerun()
-        else:
-            logger.warning("Portfolio demo access denied")
-            st.error("The access code is incorrect. Please try again.")
+        if st.button(
+            "Unlock demo",
+            type="primary",
+            use_container_width=True,
+        ):
+            if hmac.compare_digest(access_password, expected_password):
+                st.session_state.demo_access_granted = True
+                st.session_state.pop("demo_access_password", None)
+                logger.info("Portfolio demo access granted")
+                st.rerun()
+            else:
+                logger.warning("Portfolio demo access denied")
+                st.error("The access code is incorrect. Please try again.")
 
     return False
 
@@ -218,6 +357,8 @@ def _clear_dataset() -> None:
     st.session_state.uploaded_file_signature = None
     st.session_state.conversation_history = []
     st.session_state.uploader_key_version += 1
+    st.session_state.pop("query_input_composer", None)
+    st.session_state.pending_query = None
 
     logger.info("Dataset cleared from Streamlit session")
 
@@ -324,6 +465,10 @@ def _load_uploaded_file(
     st.session_state.failed_upload_signature = None
     st.session_state.dataframe = dataframe
     st.session_state.dataset_profile = dataset_profile
+    # A single-file workspace must not retain controls or table counts from
+    # a previously active catalog. The retired agent above owns and closes
+    # that catalog before this reference is cleared.
+    st.session_state.dataset_catalog = None
     st.session_state.agent = agent
     st.session_state.last_result = None
     st.session_state.conversation_history = []
@@ -424,8 +569,18 @@ def _render_catalog_controls() -> None:
         return
     records = catalog.profile.datasets
     st.caption("Active session datasets")
-    for record in records:
-        st.caption(f"• `{record.table_name}` — {record.filename} ({record.row_count:,} rows)")
+    st.dataframe(
+        [
+            {
+                "File": record.filename,
+                "Table": record.table_name,
+                "Rows": record.row_count,
+            }
+            for record in records
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
     selected_id = st.selectbox(
         "Manage dataset",
         options=[record.dataset_id for record in records],
@@ -461,6 +616,34 @@ def _render_catalog_controls() -> None:
                 logger.exception("Catalog dataset replacement failed")
                 st.error("❌ Replacement failed; the existing dataset is unchanged.")
 
+    relationships = catalog.profile.relationships
+    if not relationships:
+        return
+    st.caption("Suggested joins stay unused until you confirm them.")
+    for index, relation in enumerate(relationships):
+        st.caption(
+            f"{relation.left_table}.{relation.left_column} ↔ "
+            f"{relation.right_table}.{relation.right_column} · "
+            f"{relation.status} · {relation.overlap_percentage:.0f}% overlap"
+        )
+        if relation.status != "suggested":
+            continue
+        confirm_col, reject_col = st.columns(2)
+        with confirm_col:
+            if st.button("Confirm join", key=f"confirm_rel_{index}", use_container_width=True):
+                catalog.set_relationship_status(
+                    relation.left_table, relation.left_column,
+                    relation.right_table, relation.right_column, "confirmed",
+                )
+                st.rerun()
+        with reject_col:
+            if st.button("Reject join", key=f"reject_rel_{index}", use_container_width=True):
+                catalog.set_relationship_status(
+                    relation.left_table, relation.left_column,
+                    relation.right_table, relation.right_column, "rejected",
+                )
+                st.rerun()
+
 
 def _display_dataset_overview() -> None:
     """Display basic information about the loaded dataset."""
@@ -479,64 +662,247 @@ def _display_dataset_overview() -> None:
         """
     )
 
-    st.subheader("📋 Dataset Overview")
+    st.subheader("Dataset overview")
     if profile.statistics_sampled:
         st.caption(f"SQL analyzes all {profile.row_count:,} rows. Preview and unique/min/max/mean statistics use the first {profile.profiled_row_count:,} rows; missing-value counts cover the full dataset.")
 
-    col1, col2, col3 = st.columns(3)
+    catalog = st.session_state.dataset_catalog
+    table_count = len(catalog.profile.datasets) if catalog is not None else 1
+    total_missing = sum(column.null_count for column in profile.columns)
+
+    col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric(
-            "Rows",
-            f"{profile.row_count:,}",
-        )
+        st.metric("Rows", f"{profile.row_count:,}")
 
     with col2:
-        st.metric(
-            "Columns",
-            f"{profile.column_count:,}",
-        )
+        st.metric("Columns", f"{profile.column_count:,}")
 
     with col3:
-        total_missing = sum(
-            column.null_count
-            for column in profile.columns
+        st.metric("Missing values", f"{total_missing:,}")
+
+    with col4:
+        st.metric("Active tables", f"{table_count:,}")
+
+    preview_col, profile_col = st.columns(2)
+
+    with preview_col:
+        with st.expander("Preview data", expanded=False):
+            st.dataframe(
+                dataframe.head(10),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    with profile_col:
+        with st.expander("Dataset profile", expanded=False):
+            profile_data = [
+                {
+                    "Column": column.name,
+                    "Pandas Type": column.pandas_dtype,
+                    "Inferred Type": column.inferred_type,
+                    "Null Count": column.null_count,
+                    "Null %": round(column.null_percentage, 2),
+                    "Unique Values": column.unique_count,
+                }
+                for column in profile.columns
+            ]
+
+            st.dataframe(
+                profile_data,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+
+def _display_explore_dataset() -> None:
+    """
+    Render the 'Explore Dataset' visualization section directly from the loaded dataset,
+    independent of AI natural language queries.
+    """
+    dataframe = st.session_state.dataframe
+    profile = st.session_state.dataset_profile
+
+    if dataframe is None or dataframe.empty:
+        return
+
+    st.html(
+        """
+        <div class="section-label">
+            EXPLORE DATASET
+        </div>
+        """
+    )
+
+    with st.container(border=True):
+        st.html(
+            """
+            <div class="card-header-badge chart-badge">
+                <span class="badge-icon">📈</span>
+                <span>EXPLORE DATASET VISUALIZATIONS</span>
+            </div>
+            """
+        )
+        st.subheader("Explore Dataset")
+        st.caption(
+            "Visual exploration generated directly from your uploaded dataset, independent of AI query results."
         )
 
-        st.metric(
-            "Missing Values",
-            f"{total_missing:,}",
-        )
+        tab_auto, tab_custom = st.tabs(["✨ Auto Insights", "🎨 Interactive Visualizer"])
 
-    with st.expander("👀 Preview data", expanded=False):
-        st.dataframe(
-            dataframe.head(10),
-            use_container_width=True,
-            hide_index=True,
-        )
+        with tab_auto:
+            auto_charts = generate_dataset_auto_visualizations(dataframe, profile=profile, max_charts=4)
+            if not auto_charts:
+                st.caption("Fewer than 2 rows or no visualizable columns found in the dataset.")
+            else:
+                cols = st.columns(2, gap="medium")
+                for idx, chart_info in enumerate(auto_charts):
+                    with cols[idx % 2]:
+                        with st.container(border=True):
+                            st.caption(f"**{chart_info['title']}**")
+                            st.caption(chart_info["description"])
 
-    with st.expander("🔎 Dataset profile", expanded=False):
+                            metrics = chart_info.get("metrics")
+                            if metrics:
+                                m_cols = st.columns(len(metrics))
+                                for m_idx, m in enumerate(metrics):
+                                    m_cols[m_idx].metric(label=m["label"], value=m["value"])
 
-        profile_data = [
-            {
-                "Column": column.name,
-                "Pandas Type": column.pandas_dtype,
-                "Inferred Type": column.inferred_type,
-                "Null Count": column.null_count,
-                "Null %": round(column.null_percentage, 2),
-                "Unique Values": column.unique_count,
-            }
-            for column in profile.columns
-        ]
+                            st.plotly_chart(
+                                chart_info["figure"],
+                                use_container_width=True,
+                                key=f"auto_chart_{chart_info['id']}_{idx}",
+                            )
 
-        st.dataframe(
-            profile_data,
-            use_container_width=True,
-            hide_index=True,
-        )
+        with tab_custom:
+            classified = classify_dataset_columns(dataframe, profile=profile)
+            all_cols = classified["all"]
+            cat_cols = classified["categorical"]
+            num_cols = classified["numeric"]
+            date_cols = classified["datetime"]
+
+            ctrl_row1 = st.columns([1.4, 1.2, 1.2, 1.1])
+            with ctrl_row1[0]:
+                custom_chart_type = st.selectbox(
+                    "Chart Type",
+                    options=[
+                        "Bar Chart",
+                        "Donut / Pie Chart",
+                        "Line Chart",
+                        "Histogram",
+                        "Scatter Plot",
+                        "Grouped Bar",
+                    ],
+                    key="explore_custom_chart_type",
+                )
+
+            x_col = None
+            y_col = None
+            color_col = None
+            agg_func = "sum"
+            max_cats = 12
+            hist_bins = 25
+            show_box = True
+            orientation = "vertical"
+
+            if custom_chart_type == "Bar Chart":
+                with ctrl_row1[1]:
+                    x_col = st.selectbox("Category Column (X)", options=cat_cols if cat_cols else all_cols, key="custom_bar_x")
+                with ctrl_row1[2]:
+                    y_options = ["(Count of Records)"] + num_cols
+                    y_col = st.selectbox("Metric Column (Y)", options=y_options, key="custom_bar_y")
+                with ctrl_row1[3]:
+                    if y_col != "(Count of Records)":
+                        agg_func = st.selectbox("Aggregation", ["Sum", "Mean", "Median", "Max", "Min"], key="custom_bar_agg")
+                    else:
+                        orientation = st.selectbox("Orientation", ["Vertical", "Horizontal"], key="custom_bar_orient").lower()
+
+                ctrl_row2 = st.columns([1.4, 1.2, 1.2, 1.1])
+                with ctrl_row2[0]:
+                    max_cats = st.slider("Max Categories", min_value=5, max_value=30, value=10, key="custom_bar_cats")
+                with ctrl_row2[1]:
+                    if y_col != "(Count of Records)":
+                        orientation = st.selectbox("Orientation", ["Vertical", "Horizontal"], key="custom_bar_orient_2").lower()
+
+            elif custom_chart_type == "Donut / Pie Chart":
+                with ctrl_row1[1]:
+                    x_col = st.selectbox("Category / Slice", options=cat_cols if cat_cols else all_cols, key="custom_pie_x")
+                with ctrl_row1[2]:
+                    y_options = ["(Count of Records)"] + num_cols
+                    y_col = st.selectbox("Values", options=y_options, key="custom_pie_y")
+                with ctrl_row1[3]:
+                    if y_col != "(Count of Records)":
+                        agg_func = st.selectbox("Aggregation", ["Sum", "Mean", "Max", "Min"], key="custom_pie_agg")
+                max_cats = st.slider("Max Slices", min_value=3, max_value=15, value=7, key="custom_pie_slices")
+
+            elif custom_chart_type == "Line Chart":
+                with ctrl_row1[1]:
+                    x_col = st.selectbox("Date / Dimension (X)", options=date_cols if date_cols else all_cols, key="custom_line_x")
+                with ctrl_row1[2]:
+                    y_options = (num_cols if num_cols else []) + ["(Count of Records)"]
+                    y_col = st.selectbox("Metric Column (Y)", options=y_options, key="custom_line_y")
+                with ctrl_row1[3]:
+                    if y_col != "(Count of Records)":
+                        agg_func = st.selectbox("Aggregation", ["Sum", "Mean", "Median", "Max", "Min"], key="custom_line_agg")
+                if cat_cols:
+                    color_choice = st.selectbox("Group by Series (Optional)", options=["None"] + [c for c in cat_cols if c != x_col], key="custom_line_group")
+                    color_col = None if color_choice == "None" else color_choice
+
+            elif custom_chart_type == "Histogram":
+                with ctrl_row1[1]:
+                    x_col = st.selectbox("Numeric Column", options=num_cols if num_cols else all_cols, key="custom_hist_x")
+                with ctrl_row1[2]:
+                    hist_bins = st.slider("Bins", min_value=5, max_value=60, value=25, key="custom_hist_bins")
+                with ctrl_row1[3]:
+                    show_box = st.checkbox("Show Box Plot", value=True, key="custom_hist_box")
+
+            elif custom_chart_type == "Scatter Plot":
+                with ctrl_row1[1]:
+                    x_col = st.selectbox("X-Axis (Numeric)", options=num_cols if num_cols else all_cols, key="custom_scatter_x")
+                with ctrl_row1[2]:
+                    y_options = [c for c in num_cols if c != x_col] if len(num_cols) > 1 else num_cols
+                    y_col = st.selectbox("Y-Axis (Numeric)", options=y_options if y_options else all_cols, key="custom_scatter_y")
+                with ctrl_row1[3]:
+                    color_options = ["None"] + [c for c in cat_cols if c not in (x_col, y_col)]
+                    color_choice = st.selectbox("Color Group (Optional)", options=color_options, key="custom_scatter_color")
+                    color_col = None if color_choice == "None" else color_choice
+
+            elif custom_chart_type == "Grouped Bar":
+                with ctrl_row1[1]:
+                    x_col = st.selectbox("Category (X)", options=cat_cols if cat_cols else all_cols, key="custom_grp_x")
+                with ctrl_row1[2]:
+                    selected_metrics = st.multiselect("Metrics (Y)", options=num_cols, default=num_cols[:2] if len(num_cols) >= 2 else num_cols, key="custom_grp_metrics")
+                    y_col = ",".join(selected_metrics) if selected_metrics else None
+                with ctrl_row1[3]:
+                    agg_func = st.selectbox("Aggregation", ["Sum", "Mean", "Median", "Max", "Min"], key="custom_grp_agg")
+                max_cats = st.slider("Max Categories", min_value=3, max_value=20, value=8, key="custom_grp_cats")
+
+            if x_col:
+                fig, cust_metrics = build_custom_dataset_figure(
+                    df=dataframe,
+                    chart_type=custom_chart_type,
+                    x_col=x_col,
+                    y_col=y_col,
+                    color_col=color_col,
+                    agg_func=agg_func,
+                    max_categories=max_cats,
+                    bins=hist_bins,
+                    show_box=show_box,
+                    orientation=orientation,
+                )
+                if fig is not None:
+                    if cust_metrics:
+                        m_cols = st.columns(len(cust_metrics))
+                        for m_idx, m in enumerate(cust_metrics):
+                            m_cols[m_idx].metric(label=m["label"], value=m["value"])
+                    st.plotly_chart(fig, use_container_width=True, key="explore_custom_plotly")
+                else:
+                    st.info("Select suitable columns above to render your visualization.")
+            else:
+                st.info("No suitable columns available for this chart type.")
 
 
-def _display_chart(chart_spec) -> None:
+def _display_chart(chart_spec, query_result=None) -> None:
     """
     Render a chart specification returned by the agent's Visualization
     Intelligence stage, or a subtle "not needed" notice when the engine
@@ -556,7 +922,71 @@ def _display_chart(chart_spec) -> None:
 
     data = (chart_spec or {}).get("data", [])
 
-    if not chart_spec or not data:
+    if not chart_spec or not data or len(data) <= 1:
+        # Gracefully handle single-row, single-column, or scalar metrics
+        if (
+            query_result is not None
+            and getattr(query_result, "dataframe", None) is not None
+            and not query_result.dataframe.empty
+        ):
+            df = query_result.dataframe
+
+            # Case 1: Exactly 1 row and 1 column (e.g. single scalar metric like total, count, average)
+            if len(df) == 1 and len(df.columns) == 1:
+                col_name = str(df.columns[0]).replace("_", " ").title()
+                raw_val = df.iloc[0, 0]
+                if pd.isna(raw_val):
+                    display_val = "N/A"
+                elif isinstance(raw_val, float):
+                    display_val = f"{raw_val:,.2f}"
+                elif isinstance(raw_val, (int, np.integer)):
+                    display_val = f"{raw_val:,}"
+                else:
+                    display_val = str(raw_val)
+                st.caption("Key metric summary:")
+                st.metric(label=col_name, value=display_val)
+                return
+
+            # Case 2: Exactly 1 row and 2-4 columns (e.g. min, max, avg, sum metrics)
+            if len(df) == 1 and 1 < len(df.columns) <= 4:
+                st.caption("Key metric summary:")
+                metric_cols = st.columns(len(df.columns))
+                for idx, col in enumerate(df.columns):
+                    raw_val = df.iloc[0, idx]
+                    if pd.isna(raw_val):
+                        display_val = "N/A"
+                    elif isinstance(raw_val, float):
+                        display_val = f"{raw_val:,.2f}"
+                    elif isinstance(raw_val, (int, np.integer)):
+                        display_val = f"{raw_val:,}"
+                    else:
+                        display_val = str(raw_val)
+                    metric_cols[idx].metric(
+                        label=str(col).replace("_", " ").title(),
+                        value=display_val,
+                    )
+                return
+
+            # Case 3: Exactly 1 column with multiple rows (single list)
+            if len(df.columns) == 1 and len(df) > 1:
+                col_name = str(df.columns[0]).replace("_", " ").title()
+                st.caption(
+                    f"📋 Single-column result for **{col_name}** ({len(df):,} items) — "
+                    "best viewed in the structured table below."
+                )
+                return
+
+        # Case 4: 1 single data point in chart spec
+        if data and len(data) == 1:
+            item = data[0]
+            label = item.get("category") or item.get("x") or item.get("label") or "Result"
+            val = item.get("value") or item.get("y") or item.get("val")
+            if val is not None:
+                display_val = f"{val:,.2f}" if isinstance(val, float) else (f"{val:,}" if isinstance(val, (int, np.integer)) else str(val))
+                st.caption("Single record result:")
+                st.metric(label=str(label).replace("_", " ").title(), value=display_val)
+                return
+
         st.caption(
             "📉 Visualization isn't necessary for this result — the "
             "table below communicates it clearly."
@@ -605,10 +1035,11 @@ def _display_chart(chart_spec) -> None:
                             )
                         ),
                     ),
-                    margin=dict(t=10, b=10, l=10, r=10),
                     xaxis_title=value_col,
                     yaxis_title="",
                 )
+                fig.update_xaxes(rangemode="tozero")
+                _style_plotly_figure(fig)
 
             else:
 
@@ -619,10 +1050,11 @@ def _display_chart(chart_spec) -> None:
                 )
 
                 fig.update_layout(
-                    margin=dict(t=10, b=10, l=10, r=10),
                     xaxis_title=category_col,
                     yaxis_title=value_col,
                 )
+                fig.update_yaxes(rangemode="tozero")
+                _style_plotly_figure(fig)
 
             st.plotly_chart(
                 fig,
@@ -645,13 +1077,11 @@ def _display_chart(chart_spec) -> None:
 
                 # Multi-series time chart: every data point already
                 # carries "x" plus one key per numeric series.
-                chart_df = pd.DataFrame(data).set_index("x")
-
-                st.line_chart(
-                    chart_df,
-                    y=y_columns,
-                    use_container_width=True,
-                )
+                chart_df = pd.DataFrame(data)
+                fig = px.line(chart_df, x="x", y=y_columns)
+                fig.update_yaxes(autorange=True, rangemode="normal")
+                _style_plotly_figure(fig)
+                st.plotly_chart(fig, use_container_width=True)
 
             else:
 
@@ -660,12 +1090,11 @@ def _display_chart(chart_spec) -> None:
                         "x": [item["x"] for item in data],
                         "y": [item["y"] for item in data],
                     }
-                ).set_index("x")
-
-                st.line_chart(
-                    chart_df,
-                    use_container_width=True,
                 )
+                fig = px.line(chart_df, x="x", y="y")
+                fig.update_yaxes(autorange=True, rangemode="normal")
+                _style_plotly_figure(fig)
+                st.plotly_chart(fig, use_container_width=True)
 
             rendered = True
 
@@ -677,13 +1106,9 @@ def _display_chart(chart_spec) -> None:
                     "y": [item["y"] for item in data],
                 }
             )
-
-            st.scatter_chart(
-                chart_df,
-                x="x",
-                y="y",
-                use_container_width=True,
-            )
+            fig = px.scatter(chart_df, x="x", y="y")
+            _style_plotly_figure(fig)
+            st.plotly_chart(fig, use_container_width=True)
 
             rendered = True
 
@@ -759,11 +1184,12 @@ def _display_grouped_bar_chart(chart_spec: dict, data: list) -> None:
     )
 
     fig.update_layout(
-        margin=dict(t=10, b=10, l=10, r=10),
         legend_title_text="",
         xaxis_title=category_col,
         yaxis_title="",
     )
+    fig.update_yaxes(rangemode="tozero")
+    _style_plotly_figure(fig)
 
     st.plotly_chart(
         fig,
@@ -788,10 +1214,8 @@ def _display_pie_chart(data: list) -> None:
         textinfo="percent+label",
     )
 
-    fig.update_layout(
-        margin=dict(t=10, b=10, l=10, r=10),
-        showlegend=True,
-    )
+    fig.update_layout(showlegend=True)
+    _style_plotly_figure(fig)
 
     st.plotly_chart(
         fig,
@@ -807,12 +1231,15 @@ def _display_analysis_result() -> None:
     if result is None:
         return
 
-    st.divider()
-
     st.html(
         """
-        <div class="section-label">
-            ANALYSIS RESULT
+        <div class="result-header-bar">
+            <div class="section-label">
+                ANALYSIS RESULT
+            </div>
+            <div class="result-badge">
+                Verified Output
+            </div>
         </div>
         """
     )
@@ -820,60 +1247,73 @@ def _display_analysis_result() -> None:
     for warning in getattr(result, "warnings", []):
         st.warning(f"⚠️ {warning}")
 
-    # ----------------------------------------------------------------------
-    # 1. Key insight / explanation
-    # ----------------------------------------------------------------------
+    insight_col, chart_col = st.columns((1, 1), gap="large")
 
-    if result.explanation:
+    with insight_col:
+        with st.container(border=True):
+            st.html(
+                """
+                <div class="card-header-badge ai-badge">
+                    <span class="badge-icon">✦</span>
+                    <span>AI EXECUTIVE INSIGHT</span>
+                </div>
+                """
+            )
+            if result.explanation:
+                st.subheader("Key insight")
+                st.write(result.explanation)
+            else:
+                st.subheader("Key insight")
+                st.caption("No explanation was generated for this result.")
 
-        st.subheader("💡 Key Insight")
+    with chart_col:
+        with st.container(border=True):
+            st.html(
+                """
+                <div class="card-header-badge chart-badge">
+                    <span class="badge-icon">📊</span>
+                    <span>VISUALIZATION ENGINE</span>
+                </div>
+                """
+            )
+            _display_chart(result.chart, query_result=result.query_result)
 
-        st.write(result.explanation)
+    with st.container(border=True):
+        st.html(
+            """
+            <div class="card-header-badge table-badge">
+                <span class="badge-icon">📋</span>
+                <span>STRUCTURED QUERY RESULT</span>
+            </div>
+            """
+        )
+        st.subheader("Query result")
 
-    # ----------------------------------------------------------------------
-    # 2. Visualization
-    # #    Only rendered when the Visualization Intelligence stage decided
-    #    it adds value; otherwise a subtle notice is shown in its place
-    #    (see _display_chart), never a silent empty gap.
-    # ----------------------------------------------------------------------
+        query_result = result.query_result
 
-    _display_chart(result.chart)
+        if query_result is not None:
 
-    # ----------------------------------------------------------------------
-    # 3. Query result
-    # ----------------------------------------------------------------------
+            if query_result.truncated:
+                st.caption(
+                    f"Rows returned: {query_result.row_count:,} "
+                    "| Reached the result limit; additional rows may be "
+                    "available."
+                )
+            else:
+                st.caption(
+                    f"Rows returned: {query_result.row_count:,}"
+                )
 
-    st.subheader("📊 Query Result")
-
-    query_result = result.query_result
-
-    if query_result is not None:
-
-        if query_result.truncated:
-            st.caption(
-                f"Rows returned: {query_result.row_count:,} "
-                "| Reached the result limit; additional rows may be "
-                "available."
+            st.dataframe(
+                query_result.dataframe,
+                use_container_width=True,
+                hide_index=True,
             )
         else:
-            st.caption(
-                f"Rows returned: {query_result.row_count:,}"
-            )
+            st.caption("No tabular result is available for this question.")
 
-        st.dataframe(
-            query_result.dataframe,
-            use_container_width=True,
-            hide_index=True,
-        )
-
-    # ----------------------------------------------------------------------
-    # 4. Generated SQL
-    #    Collapsed by default so it supports the result instead of
-    #    dominating it.
-    # ----------------------------------------------------------------------
-
-    with st.expander("🧾 Generated SQL", expanded=False):
-
+    with st.expander("Generated SQL", expanded=False):
+        st.caption("Executed safely in sandboxed DuckDB query engine")
         st.code(
             result.sql,
             language="sql",
@@ -899,35 +1339,27 @@ def main() -> None:
     )
 
     # ----------------------------------------------------------------------
-    # Header
-    # ----------------------------------------------------------------------
-
-    st.html(
-        """
-        <div class="app-eyebrow">
-            INTELLIGENT DATA ANALYSIS
-        </div>
-        """
-    )
-
-    st.title(f"📊 {config.app_name}")
-
-    st.caption(
-        "Upload a CSV, ask a question in plain English, and let the "
-        "AI Data Analyst Agent plan, validate, execute, explain, and "
-        "visualize the result."
-    )
-
-    # ----------------------------------------------------------------------
     # Sidebar
     # ----------------------------------------------------------------------
 
     with st.sidebar:
 
-        st.header("⚙️ Dataset")
+        st.html(
+            """
+            <div class="sidebar-brand">
+                <div class="sidebar-mark">AI</div>
+                <div class="sidebar-brand-copy">
+                    <div class="sidebar-brand-title">Data Analyst</div>
+                    <div class="sidebar-brand-sub">Production Suite</div>
+                </div>
+            </div>
+            """
+        )
+
+        st.html('<div class="sidebar-section-label">Data</div>')
 
         st.caption(
-            "Upload a CSV dataset to activate the AI analyst."
+            "Upload one or more CSV files. Each file stays isolated until a join is confirmed."
         )
 
         uploaded_file = st.file_uploader(
@@ -970,6 +1402,19 @@ def main() -> None:
             st.session_state.upload_error = False
             st.session_state.failed_upload_signature = None
 
+        status_label, status_modifier, _ = _workspace_status()
+        filename = html.escape(
+            str(st.session_state.uploaded_filename or "No dataset loaded")
+        )
+        st.html(
+            f"""
+            <div class="sidebar-status {status_modifier}">
+                <span class="sidebar-status-dot"></span>
+                <span>{status_label} · {filename}</span>
+            </div>
+            """
+        )
+
         _render_catalog_controls()
 
         if st.button(
@@ -980,21 +1425,7 @@ def main() -> None:
             _clear_dataset()
             st.rerun()
 
-        if st.button(
-            "Clear follow-up context",
-            disabled=not st.session_state.conversation_history,
-            use_container_width=True,
-            help=(
-                "Forget prior questions from this browser session while "
-                "keeping the current dataset loaded."
-            ),
-        ):
-            _clear_conversation_history()
-            st.rerun()
-
-        st.divider()
-
-        st.header("📈 Visualization")
+        st.html('<div class="sidebar-section-label">Visualization</div>')
 
         chart_option = st.selectbox(
             "Chart type",
@@ -1020,7 +1451,21 @@ def main() -> None:
 
         selected_chart_type = chart_type_map[chart_option]
 
-        st.divider()
+        st.html('<div class="sidebar-section-label">Session</div>')
+
+        if st.button(
+            "Clear follow-up context",
+            disabled=not st.session_state.conversation_history,
+            use_container_width=True,
+            help=(
+                "Forget prior questions from this browser session while "
+                "keeping the current dataset loaded."
+            ),
+        ):
+            _clear_conversation_history()
+            st.rerun()
+
+        st.html('<div class="sidebar-section-label">System</div>')
 
         st.caption(
             f"Environment: `{config.app_env}`"
@@ -1029,6 +1474,29 @@ def main() -> None:
         st.caption(
             f"AI provider: `{config.llm_provider}`"
         )
+
+    status_label, _, chip_class = _workspace_status()
+    filename = st.session_state.uploaded_filename or "No dataset loaded"
+
+    st.html(
+        f"""
+        <div class="workspace-header">
+            <div class="app-eyebrow"><span class="eyebrow-dot"></span> ANALYTICS WORKSPACE</div>
+            <div class="status-chip {chip_class}">{status_label}</div>
+        </div>
+        """
+    )
+
+    st.title(f"📊 {config.app_name}")
+
+    if st.session_state.dataframe is None:
+        st.caption(
+            "Upload a CSV, ask a question in plain English, and let the "
+            "AI Data Analyst Agent plan, validate, execute, explain, and "
+            "visualize the result."
+        )
+    else:
+        st.caption(f"Active workspace · {filename}")
 
     # ----------------------------------------------------------------------
     # Empty state
@@ -1057,15 +1525,13 @@ def main() -> None:
                 </div>
 
                 <div class="hero-title">
-                    Talk to your data.
+                    A private analytics workspace for CSV data.
                 </div>
 
                 <div class="hero-description">
-                    Upload a CSV dataset and ask questions in
-                    plain English. The AI Data Analyst Agent
-                    transforms your questions into secure SQL,
-                    analyzes the results, and turns them into
-                    clear insights and visualizations.
+                    Load one or more datasets, ask a question in
+                    plain English, and review the insight, chart,
+                    table, and validated SQL in one dashboard.
                 </div>
 
             </div>
@@ -1079,7 +1545,7 @@ def main() -> None:
         st.html(
             """
             <div class="section-label">
-                WHAT THIS APP CAN DO
+                WORKSPACE CAPABILITIES
             </div>
             """
         )
@@ -1162,10 +1628,8 @@ def main() -> None:
         st.html(
             """
             <div class="info-strip">
-                <span>✨</span>
                 <span>
-                    Powered by secure SQL validation, DuckDB,
-                    and Gemini.
+                    Secure SQL validation · DuckDB execution · Gemini planning
                 </span>
             </div>
             """
@@ -1178,8 +1642,7 @@ def main() -> None:
         st.html(
             """
             <div class="app-footer">
-                💡 Upload your dataset from the sidebar to start
-                asking questions.
+                Upload a dataset from the sidebar to open the analyst workspace.
             </div>
             """
         )
@@ -1196,7 +1659,11 @@ def main() -> None:
 
     _display_dataset_overview()
 
-    st.divider()
+    # ----------------------------------------------------------------------
+    # Explore Dataset
+    # ----------------------------------------------------------------------
+
+    _display_explore_dataset()
 
     # ----------------------------------------------------------------------
     # Natural-language question
@@ -1210,33 +1677,63 @@ def main() -> None:
         """
     )
 
-    st.subheader("💬 Ask a question about your data")
+    composer_col, context_col = st.columns((2.2, 1), gap="large")
 
-    history_count = len(st.session_state.conversation_history)
+    with composer_col:
+        with st.container(border=True):
+            st.subheader("Ask a question about your data")
+            if st.session_state.get("pending_query") is not None:
+                st.session_state.query_input_composer = st.session_state.pop("pending_query")
 
-    if history_count:
-        st.caption(
-            f"💬 Follow-up context is active from the last "
-            f"{history_count} successful "
-            f"{'question' if history_count == 1 else 'questions'} in "
-            "this browser session."
-        )
+            question = st.text_area(
+                "Your question",
+                placeholder=(
+                    "Example: What are the top 10 products by total sales?"
+                ),
+                height=110,
+                max_chars=config.max_question_chars,
+                label_visibility="collapsed",
+                key="query_input_composer",
+            )
 
-    question = st.text_area(
-        "Your question",
-        placeholder=(
-            "Example: What are the top 10 products by total sales?"
-        ),
-        height=110,
-        max_chars=config.max_question_chars,
-        label_visibility="collapsed",
-    )
+            suggestions = _get_suggested_questions(st.session_state.dataset_profile)
+            if suggestions:
+                st.html('<div class="suggested-prompts-header">⚡ Suggested Questions</div>')
+                sug_cols = st.columns(len(suggestions))
+                for idx, sug in enumerate(suggestions):
+                    with sug_cols[idx]:
+                        st.button(
+                            f"💡 {sug}",
+                            key=f"sug_btn_{idx}",
+                            use_container_width=True,
+                            help=f"Click to load: {sug}",
+                            on_click=_apply_suggested_question,
+                            args=(sug,),
+                        )
 
-    analyze_clicked = st.button(
-        "🚀 Analyze",
-        type="primary",
-        use_container_width=True,
-    )
+            analyze_clicked = st.button(
+                "🚀 Analyze",
+                type="primary",
+                use_container_width=True,
+            )
+
+    with context_col:
+        with st.container(border=True):
+            st.subheader("Session context")
+            history_count = len(st.session_state.conversation_history)
+            if history_count:
+                st.caption(
+                    f"Follow-up context is active from the last "
+                    f"{history_count} successful "
+                    f"{'question' if history_count == 1 else 'questions'} in "
+                    "this browser session."
+                )
+            else:
+                st.caption("No follow-up context yet. Each successful analysis can inform the next question.")
+            if st.session_state.last_result is not None:
+                st.caption("Latest analysis is shown below.")
+            else:
+                st.caption("Run a question to populate insights, charts, and SQL.")
 
     if analyze_clicked:
 

@@ -54,6 +54,8 @@ import sqlglot
 from sqlglot import exp
 import numpy as np
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 
 from app.models.schemas import QueryResult
 from app.utils.logger import get_logger
@@ -64,6 +66,16 @@ logger = get_logger(__name__)
 # --------------------------------------------------------------------------
 # Constants
 # --------------------------------------------------------------------------
+
+DARK_THEME_COLORWAY = [
+    "#0EA5E9",  # Electric sky / teal
+    "#06B6D4",  # Cyan
+    "#6366F1",  # Indigo
+    "#10B981",  # Emerald
+    "#F59E0B",  # Amber
+    "#8B5CF6",  # Violet
+    "#EC4899",  # Pink
+]
 
 DEFAULT_MAX_CATEGORIES = 20
 DEFAULT_MAX_ROWS = 1000
@@ -213,6 +225,13 @@ def generate_chart(
 
     if df.empty or len(df.columns) == 0:
         logger.info("Skipping chart generation because query result is empty")
+        return None
+
+    if len(df.columns) <= 1:
+        logger.info(
+            "Skipping chart generation because query result has only %d column",
+            len(df.columns),
+        )
         return None
 
     numeric_columns = _numeric_columns(df)
@@ -1012,3 +1031,660 @@ def _json_safe(value: Any) -> Any:
         return value.tolist()
 
     return value
+
+
+# --------------------------------------------------------------------------
+# Dataset Exploration & Visualization Intelligence
+# --------------------------------------------------------------------------
+
+
+def style_dark_figure(
+    fig: go.Figure,
+    title: Optional[str] = None,
+    x_title: Optional[str] = None,
+    y_title: Optional[str] = None,
+) -> go.Figure:
+    """Apply the workspace dark analytics chart theme to a Plotly figure."""
+
+    layout_updates: Dict[str, Any] = {
+        "paper_bgcolor": "rgba(0,0,0,0)",
+        "plot_bgcolor": "rgba(15, 23, 42, 0.55)",
+        "font": dict(
+            color="#94A3B8",
+            size=12,
+            family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif",
+        ),
+        "colorway": DARK_THEME_COLORWAY,
+        "legend": dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.22,
+            xanchor="center",
+            x=0.5,
+            font=dict(color="#CBD5E1", size=11),
+        ),
+        "margin": dict(t=16, b=64, l=16, r=16),
+        "autosize": True,
+        "title": None,
+        "hoverlabel": dict(
+            bgcolor="#0F172A",
+            bordercolor="#0EA5E9",
+            font=dict(color="#F8FAFC", size=12),
+        ),
+    }
+
+    fig.update_layout(**layout_updates)
+
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="rgba(255, 255, 255, 0.07)",
+        zeroline=False,
+        tickfont=dict(color="#94A3B8"),
+        title_font=dict(color="#CBD5E1"),
+    )
+    if x_title is not None:
+        fig.update_xaxes(title_text=x_title)
+
+    fig.update_yaxes(
+        showgrid=True,
+        gridcolor="rgba(255, 255, 255, 0.07)",
+        zeroline=False,
+        tickfont=dict(color="#94A3B8"),
+        title_font=dict(color="#CBD5E1"),
+    )
+    if y_title is not None:
+        fig.update_yaxes(title_text=y_title)
+
+    return fig
+
+
+def classify_dataset_columns(
+    df: pd.DataFrame,
+    profile: Optional[Any] = None,
+) -> Dict[str, List[str]]:
+    """
+    Classify columns of a dataset into semantic categories for exploration.
+
+    Returns a dict with keys:
+        - "numeric": numeric columns (int, float, excluding pure booleans)
+        - "categorical": low-to-medium cardinality categorical columns
+        - "datetime": date/time columns (datetime64 or parseable dates)
+        - "all": all columns
+    """
+    if df is None or df.empty:
+        return {"numeric": [], "categorical": [], "datetime": [], "all": []}
+
+    all_cols = [str(c) for c in df.columns]
+    num_cols: List[str] = []
+    cat_cols: List[str] = []
+    date_cols: List[str] = []
+
+    profile_type_map: Dict[str, str] = {}
+    if profile is not None and getattr(profile, "columns", None):
+        for col_p in profile.columns:
+            profile_type_map[col_p.name] = str(getattr(col_p, "inferred_type", ""))
+
+    for col in all_cols:
+        series = df[col]
+        inferred = profile_type_map.get(col, "")
+
+        # Datetime check
+        if inferred == "datetime" or pd.api.types.is_datetime64_any_dtype(series):
+            date_cols.append(col)
+            continue
+        elif pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+            name_lower = col.lower()
+            if any(term in name_lower for term in ("date", "time", "timestamp", "year_month", "period")):
+                sample = series.dropna().head(30)
+                if len(sample) > 0:
+                    try:
+                        parsed = pd.to_datetime(sample, errors="coerce")
+                        if parsed.notna().sum() / len(sample) >= 0.8:
+                            date_cols.append(col)
+                            continue
+                    except Exception:
+                        pass
+
+        # Numeric check
+        if (
+            (inferred in ("integer", "float") or pd.api.types.is_numeric_dtype(series))
+            and not pd.api.types.is_bool_dtype(series)
+        ):
+            num_cols.append(col)
+            continue
+
+        # Categorical check
+        if (
+            inferred in ("string", "category", "boolean")
+            or pd.api.types.is_object_dtype(series)
+            or pd.api.types.is_string_dtype(series)
+            or pd.api.types.is_categorical_dtype(series)
+            or pd.api.types.is_bool_dtype(series)
+        ):
+            n_unique = series.nunique(dropna=True)
+            if 1 < n_unique <= max(100, int(len(df) * 0.8)):
+                cat_cols.append(col)
+            elif n_unique > 0 and len(cat_cols) == 0:
+                cat_cols.append(col)
+
+    def _num_score(c: str) -> int:
+        c_lower = c.lower()
+        if c_lower in ("id", "index") or c_lower.endswith("_id") or c_lower.startswith("id_"):
+            return 10
+        return 0
+
+    num_cols.sort(key=_num_score)
+
+    def _cat_score(c: str) -> int:
+        n_u = df[c].nunique(dropna=True)
+        if 2 <= n_u <= 25:
+            return 0
+        if 26 <= n_u <= 60:
+            return 1
+        return 2
+
+    cat_cols.sort(key=_cat_score)
+
+    return {
+        "numeric": num_cols,
+        "categorical": cat_cols,
+        "datetime": date_cols,
+        "all": all_cols,
+    }
+
+
+def generate_dataset_auto_visualizations(
+    df: pd.DataFrame,
+    profile: Optional[Any] = None,
+    max_charts: int = 4,
+) -> List[Dict[str, Any]]:
+    """
+    Automatically identify suitable columns and generate meaningful visualizations.
+
+    Returns a list of dicts:
+        - "id": unique identifier
+        - "title": chart title
+        - "chart_type": type of visualization
+        - "figure": styled Plotly figure
+        - "description": concise analytical description
+        - "metrics": optional list of {"label": str, "value": str}
+    """
+    if df is None or df.empty or len(df) < 2:
+        return []
+
+    classified = classify_dataset_columns(df, profile)
+    num_cols = classified["numeric"]
+    cat_cols = classified["categorical"]
+    date_cols = classified["datetime"]
+
+    charts: List[Dict[str, Any]] = []
+
+    # 1. Categorical Breakdown (Donut if <= 7, else horizontal Bar chart)
+    if cat_cols:
+        primary_cat = cat_cols[0]
+        val_counts = df[primary_cat].value_counts().dropna()
+        if len(val_counts) >= 2:
+            if len(val_counts) <= 7:
+                labels = [str(k) for k in val_counts.index]
+                values = val_counts.values.tolist()
+                fig = px.pie(
+                    names=labels,
+                    values=values,
+                    hole=0.45,
+                )
+                fig.update_traces(
+                    textposition="inside",
+                    textinfo="percent+label",
+                    hovertemplate="<b>%{label}</b><br>Count: %{value:,}<br>Share: %{percent}<extra></extra>",
+                )
+                style_dark_figure(fig, title=f"Proportion by {primary_cat}")
+                charts.append({
+                    "id": f"donut_{primary_cat}",
+                    "title": f"Proportion by {primary_cat}",
+                    "chart_type": "donut",
+                    "figure": fig,
+                    "description": f"Composition across top {len(labels)} categories.",
+                    "metrics": [
+                        {"label": "Categories", "value": f"{len(val_counts):,}"},
+                        {"label": "Top Category", "value": f"{labels[0]} ({values[0]:,})"},
+                    ],
+                })
+            else:
+                top_10 = val_counts.head(10).reset_index()
+                top_10.columns = [primary_cat, "count"]
+                fig = px.bar(
+                    top_10,
+                    x="count",
+                    y=primary_cat,
+                    orientation="h",
+                )
+                fig.update_layout(
+                    yaxis=dict(
+                        categoryorder="array",
+                        categoryarray=list(reversed([str(v) for v in top_10[primary_cat]])),
+                    ),
+                )
+                fig.update_traces(
+                    marker_color="#0EA5E9",
+                    hovertemplate=f"<b>%{{y}}</b><br>Count: %{{x:,}}<extra></extra>",
+                )
+                style_dark_figure(fig, title=f"Top {primary_cat} by Count", x_title="Count", y_title="")
+                charts.append({
+                    "id": f"bar_{primary_cat}",
+                    "title": f"Top Categories: {primary_cat}",
+                    "chart_type": "bar",
+                    "figure": fig,
+                    "description": f"Frequency ranking of top {len(top_10)} categories.",
+                    "metrics": [
+                        {"label": "Total Unique", "value": f"{len(val_counts):,}"},
+                        {"label": "Top Leader", "value": f"{top_10.iloc[0][primary_cat]}"},
+                    ],
+                })
+
+    # 2. Date/Time Trend (Line chart for trends over time)
+    if date_cols and len(charts) < max_charts:
+        date_col = date_cols[0]
+        safe_df = df.dropna(subset=[date_col]).copy()
+        try:
+            safe_df["_parsed_date"] = pd.to_datetime(safe_df[date_col], errors="coerce")
+            safe_df = safe_df.dropna(subset=["_parsed_date"])
+            if len(safe_df) >= 2:
+                if num_cols:
+                    metric_col = num_cols[0]
+                    trend_df = safe_df.groupby(safe_df["_parsed_date"].dt.date)[metric_col].agg(["sum", "count"]).reset_index()
+                    trend_df.columns = ["date", "val", "count"]
+                    trend_df = trend_df.sort_values("date")
+                    metric_label = f"Total {metric_col}"
+                else:
+                    trend_df = safe_df.groupby(safe_df["_parsed_date"].dt.date).size().reset_index()
+                    trend_df.columns = ["date", "val"]
+                    trend_df = trend_df.sort_values("date")
+                    metric_label = "Record Count"
+
+                if len(trend_df) >= 2:
+                    fig = px.line(
+                        trend_df,
+                        x="date",
+                        y="val",
+                        markers=len(trend_df) <= 60,
+                    )
+                    fig.update_traces(
+                        line=dict(width=2.5, color="#06B6D4"),
+                        hovertemplate="<b>Date: %{x}</b><br>Value: %{y:,.2f}<extra></extra>",
+                    )
+                    style_dark_figure(
+                        fig,
+                        title=f"{metric_label} Trend ({date_col})",
+                        x_title="Date",
+                        y_title=metric_label,
+                    )
+                    charts.append({
+                        "id": f"trend_{date_col}",
+                        "title": f"Timeline Trend ({date_col})",
+                        "chart_type": "line",
+                        "figure": fig,
+                        "description": f"Chronological trend across time periods.",
+                        "metrics": [
+                            {"label": "Periods", "value": f"{len(trend_df):,}"},
+                            {"label": "Peak Value", "value": f"{trend_df['val'].max():,.2f}" if trend_df['val'].max() > 10 else f"{trend_df['val'].max():,}"},
+                        ],
+                    })
+        except Exception as exc:
+            logger.debug("Failed auto-generating datetime line chart: %s", exc)
+
+    # 3. Numeric Column Distribution, Histogram, and Summary Metrics
+    if num_cols and len(charts) < max_charts:
+        primary_num = num_cols[0]
+        num_series = df[primary_num].dropna()
+        if len(num_series) >= 2 and num_series.nunique() > 1:
+            mean_v = float(num_series.mean())
+            median_v = float(num_series.median())
+            std_v = float(num_series.std()) if len(num_series) > 1 else 0.0
+            min_v = float(num_series.min())
+            max_v = float(num_series.max())
+
+            hist_df = pd.DataFrame({primary_num: num_series})
+            if len(hist_df) > 5000:
+                hist_sample = hist_df.sample(5000, random_state=42)
+            else:
+                hist_sample = hist_df
+
+            fig = px.histogram(
+                hist_sample,
+                x=primary_num,
+                nbins=25,
+                marginal="box",
+            )
+            fig.update_traces(
+                marker_color="#06B6D4",
+                marker_line_color="#0EA5E9",
+                marker_line_width=1,
+                opacity=0.85,
+                hovertemplate=f"Range: %{{x}}<br>Count: %{{y:,}}<extra></extra>",
+            )
+            style_dark_figure(
+                fig,
+                title=f"Distribution: {primary_num}",
+                x_title=primary_num,
+                y_title="Frequency",
+            )
+            charts.append({
+                "id": f"hist_{primary_num}",
+                "title": f"Distribution: {primary_num}",
+                "chart_type": "histogram",
+                "figure": fig,
+                "description": f"Histogram and spread box plot showing variance and central tendency.",
+                "metrics": [
+                    {"label": "Mean", "value": f"{mean_v:,.2f}" if abs(mean_v) < 1e6 else f"{mean_v:,.0f}"},
+                    {"label": "Median", "value": f"{median_v:,.2f}" if abs(median_v) < 1e6 else f"{median_v:,.0f}"},
+                    {"label": "Min - Max", "value": f"{min_v:,.1f} to {max_v:,.1f}"},
+                    {"label": "Std Dev", "value": f"{std_v:,.2f}"},
+                ],
+            })
+
+    # 4. Category + Numeric Value: Aggregated Bar Chart
+    if cat_cols and num_cols and len(charts) < max_charts:
+        agg_cat = cat_cols[1] if len(cat_cols) > 1 else cat_cols[0]
+        agg_num = num_cols[0]
+        grouped = df.groupby(agg_cat)[agg_num].mean().dropna().sort_values(ascending=False).head(10).reset_index()
+        if len(grouped) >= 2:
+            fig = px.bar(
+                grouped,
+                x=agg_cat,
+                y=agg_num,
+            )
+            fig.update_traces(
+                marker_color="#10B981",
+                hovertemplate=f"<b>%{{x}}</b><br>Average {agg_num}: %{{y:,.2f}}<extra></extra>",
+            )
+            style_dark_figure(
+                fig,
+                title=f"Avg {agg_num} by {agg_cat}",
+                x_title=agg_cat,
+                y_title=f"Average {agg_num}",
+            )
+            charts.append({
+                "id": f"agg_bar_{agg_cat}_{agg_num}",
+                "title": f"Average {agg_num} by {agg_cat}",
+                "chart_type": "bar",
+                "figure": fig,
+                "description": f"Aggregated metric comparison across categories.",
+                "metrics": [
+                    {"label": "Top Category", "value": str(grouped.iloc[0][agg_cat])},
+                    {"label": "Highest Avg", "value": f"{grouped.iloc[0][agg_num]:,.2f}"},
+                ],
+            })
+
+    # 5. Two Numeric Columns: Scatter Plot (Correlation)
+    if len(num_cols) >= 2 and len(charts) < max_charts:
+        x_num = num_cols[0]
+        y_num = num_cols[1]
+        pair_df = df[[x_num, y_num]].dropna()
+        if len(pair_df) >= 5 and pair_df[x_num].nunique() > 1 and pair_df[y_num].nunique() > 1:
+            if len(pair_df) > 1000:
+                pair_sample = pair_df.sample(1000, random_state=42)
+            else:
+                pair_sample = pair_df
+
+            corr_val = pair_df[x_num].corr(pair_df[y_num])
+            corr_str = f"{corr_val:.2f}" if pd.notna(corr_val) else "N/A"
+
+            fig = px.scatter(
+                pair_sample,
+                x=x_num,
+                y=y_num,
+                opacity=0.75,
+            )
+            fig.update_traces(
+                marker=dict(size=7, color="#6366F1", line=dict(width=1, color="#A5B4FC")),
+                hovertemplate=f"<b>{x_num}:</b> %{{x:,.2f}}<br><b>{y_num}:</b> %{{y:,.2f}}<extra></extra>",
+            )
+            style_dark_figure(
+                fig,
+                title=f"{x_num} vs {y_num}",
+                x_title=x_num,
+                y_title=y_num,
+            )
+            charts.append({
+                "id": f"scatter_{x_num}_{y_num}",
+                "title": f"Correlation: {x_num} vs {y_num}",
+                "chart_type": "scatter",
+                "figure": fig,
+                "description": f"Scatter correlation between {x_num} and {y_num} (Pearson r = {corr_str}).",
+                "metrics": [
+                    {"label": "Correlation (r)", "value": corr_str},
+                    {"label": "Points Plotted", "value": f"{len(pair_sample):,}"},
+                ],
+            })
+
+    return charts[:max_charts]
+
+
+def build_custom_dataset_figure(
+    df: pd.DataFrame,
+    chart_type: str,
+    x_col: str,
+    y_col: Optional[str] = None,
+    color_col: Optional[str] = None,
+    agg_func: str = "sum",
+    max_categories: int = 15,
+    bins: int = 25,
+    show_box: bool = True,
+    orientation: str = "vertical",
+) -> Tuple[Optional[go.Figure], Optional[List[Dict[str, str]]]]:
+    """
+    Build a customized Plotly figure based on user interaction in Explore Dataset.
+
+    Returns:
+        (figure, summary_metrics_list)
+    """
+    if df is None or df.empty or not x_col or x_col not in df.columns:
+        return None, None
+
+    chart_type = chart_type.lower()
+    metrics: List[Dict[str, str]] = []
+
+    try:
+        if chart_type in ("bar", "bar chart"):
+            if not y_col or y_col == "(Count of Records)":
+                vc = df[x_col].value_counts().dropna().head(max_categories).reset_index()
+                vc.columns = [x_col, "Count"]
+                if orientation == "horizontal":
+                    fig = px.bar(vc, x="Count", y=x_col, orientation="h")
+                    fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed([str(v) for v in vc[x_col]]))))
+                else:
+                    fig = px.bar(vc, x=x_col, y="Count")
+                style_dark_figure(fig, title=f"Record Count by {x_col}", x_title="Count" if orientation == "horizontal" else x_col, y_title="" if orientation == "horizontal" else "Count")
+                metrics = [{"label": "Total Categories", "value": f"{df[x_col].nunique():,}"}]
+                return fig, metrics
+
+            clean_df = df[[x_col, y_col] + ([color_col] if color_col and color_col in df.columns and color_col != x_col else [])].dropna()
+            clean_df[y_col] = pd.to_numeric(clean_df[y_col], errors="coerce")
+            clean_df = clean_df.dropna(subset=[y_col])
+
+            if color_col and color_col in clean_df.columns and color_col != x_col:
+                grp = clean_df.groupby([x_col, color_col])[y_col].agg(agg_func.lower()).reset_index()
+                top_cats = clean_df.groupby(x_col)[y_col].sum().nlargest(max_categories).index
+                grp = grp[grp[x_col].isin(top_cats)]
+                fig = px.bar(grp, x=x_col, y=y_col, color=color_col, barmode="group")
+                fig.update_yaxes(rangemode="tozero")
+                style_dark_figure(fig, title=f"{agg_func.capitalize()} of {y_col} by {x_col} and {color_col}")
+                return fig, None
+
+            grp = clean_df.groupby(x_col)[y_col].agg(agg_func.lower()).reset_index()
+            grp = grp.sort_values(y_col, ascending=False).head(max_categories)
+            if orientation == "horizontal":
+                fig = px.bar(grp, x=y_col, y=x_col, orientation="h")
+                fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed([str(v) for v in grp[x_col]]))))
+                fig.update_xaxes(rangemode="tozero")
+            else:
+                fig = px.bar(grp, x=x_col, y=y_col)
+                fig.update_yaxes(rangemode="tozero")
+            style_dark_figure(fig, title=f"{agg_func.capitalize()} of {y_col} by {x_col}", x_title=y_col if orientation == "horizontal" else x_col, y_title="" if orientation == "horizontal" else f"{agg_func.capitalize()} of {y_col}")
+            if len(grp) > 0:
+                metrics = [
+                    {"label": "Top Category", "value": str(grp.iloc[0][x_col])},
+                    {"label": f"Top {agg_func.capitalize()}", "value": f"{grp.iloc[0][y_col]:,.2f}"},
+                ]
+            return fig, metrics
+
+        elif chart_type in ("pie", "donut", "pie / donut", "donut / pie chart"):
+            if not y_col or y_col == "(Count of Records)":
+                vc = df[x_col].value_counts().dropna().head(max_categories)
+                labels = [str(k) for k in vc.index]
+                values = vc.values.tolist()
+            else:
+                clean_df = df[[x_col, y_col]].dropna()
+                clean_df[y_col] = pd.to_numeric(clean_df[y_col], errors="coerce")
+                clean_df = clean_df.dropna(subset=[y_col])
+                grp = clean_df.groupby(x_col)[y_col].agg(agg_func.lower()).sort_values(ascending=False).head(max_categories)
+                labels = [str(k) for k in grp.index]
+                values = grp.values.tolist()
+
+            fig = px.pie(names=labels, values=values, hole=0.45)
+            fig.update_traces(
+                textposition="inside",
+                textinfo="percent+label",
+                hovertemplate="<b>%{label}</b><br>Value: %{value:,.2f}<br>Share: %{percent}<extra></extra>",
+            )
+            style_dark_figure(fig, title=f"Proportion by {x_col}")
+            return fig, None
+
+        elif chart_type in ("line", "line chart"):
+            clean_df = df.dropna(subset=[x_col]).copy()
+            is_date = False
+            try:
+                clean_df["_x_sort"] = pd.to_datetime(clean_df[x_col], errors="coerce")
+                if clean_df["_x_sort"].notna().sum() > 0:
+                    clean_df = clean_df.dropna(subset=["_x_sort"]).sort_values("_x_sort")
+                    is_date = True
+            except Exception:
+                pass
+
+            if not y_col or y_col == "(Count of Records)":
+                grp = clean_df.groupby(x_col).size().reset_index(name="Count")
+                if is_date:
+                    grp["_date"] = pd.to_datetime(grp[x_col], errors="coerce")
+                    grp = grp.sort_values("_date")
+                fig = px.line(grp, x=x_col, y="Count", markers=len(grp) <= 60)
+                fig.update_yaxes(autorange=True, rangemode="normal")
+                style_dark_figure(fig, title=f"Count Trend across {x_col}")
+                return fig, None
+
+            clean_df[y_col] = pd.to_numeric(clean_df[y_col], errors="coerce")
+            clean_df = clean_df.dropna(subset=[y_col])
+
+            if color_col and color_col in clean_df.columns and color_col != x_col:
+                grp = clean_df.groupby([x_col, color_col])[y_col].agg(agg_func.lower()).reset_index()
+                fig = px.line(grp, x=x_col, y=y_col, color=color_col)
+                fig.update_yaxes(autorange=True, rangemode="normal")
+                style_dark_figure(fig, title=f"{y_col} by {x_col} & {color_col}")
+                return fig, None
+
+            grp = clean_df.groupby(x_col)[y_col].agg(agg_func.lower()).reset_index()
+            if is_date:
+                grp["_date"] = pd.to_datetime(grp[x_col], errors="coerce")
+                grp = grp.sort_values("_date")
+            fig = px.line(grp, x=x_col, y=y_col, markers=len(grp) <= 60)
+            fig.update_yaxes(autorange=True, rangemode="normal")
+            style_dark_figure(fig, title=f"{agg_func.capitalize()} of {y_col} across {x_col}")
+            return fig, None
+
+        elif chart_type in ("histogram", "distribution"):
+            clean_series = pd.to_numeric(df[x_col], errors="coerce").dropna()
+            if len(clean_series) < 2 or clean_series.nunique() <= 1:
+                return None, None
+
+            mean_v = float(clean_series.mean())
+            median_v = float(clean_series.median())
+            std_v = float(clean_series.std()) if len(clean_series) > 1 else 0.0
+            min_v = float(clean_series.min())
+            max_v = float(clean_series.max())
+
+            hist_df = pd.DataFrame({x_col: clean_series})
+            if len(hist_df) > 5000:
+                hist_sample = hist_df.sample(5000, random_state=42)
+            else:
+                hist_sample = hist_df
+
+            fig = px.histogram(
+                hist_sample,
+                x=x_col,
+                nbins=bins,
+                marginal="box" if show_box else None,
+            )
+            fig.update_traces(
+                marker_color="#06B6D4",
+                marker_line_color="#0EA5E9",
+                marker_line_width=1,
+                opacity=0.85,
+                hovertemplate=f"Range: %{{x}}<br>Count: %{{y:,}}<extra></extra>",
+            )
+            style_dark_figure(fig, title=f"Distribution of {x_col}", x_title=x_col, y_title="Frequency")
+            metrics = [
+                {"label": "Mean", "value": f"{mean_v:,.2f}" if abs(mean_v) < 1e6 else f"{mean_v:,.0f}"},
+                {"label": "Median", "value": f"{median_v:,.2f}" if abs(median_v) < 1e6 else f"{median_v:,.0f}"},
+                {"label": "Std Dev", "value": f"{std_v:,.2f}"},
+                {"label": "Range", "value": f"{min_v:,.1f} - {max_v:,.1f}"},
+            ]
+            return fig, metrics
+
+        elif chart_type in ("scatter", "scatter plot"):
+            if not y_col or y_col not in df.columns:
+                return None, None
+
+            cols_to_keep = [x_col, y_col]
+            has_color = color_col and color_col in df.columns and color_col not in (x_col, y_col)
+            if has_color:
+                cols_to_keep.append(color_col)
+
+            clean_df = df[cols_to_keep].dropna()
+            clean_df[x_col] = pd.to_numeric(clean_df[x_col], errors="coerce")
+            clean_df[y_col] = pd.to_numeric(clean_df[y_col], errors="coerce")
+            clean_df = clean_df.dropna(subset=[x_col, y_col])
+
+            if len(clean_df) > 1000:
+                plot_sample = clean_df.sample(1000, random_state=42)
+            else:
+                plot_sample = clean_df
+
+            fig = px.scatter(
+                plot_sample,
+                x=x_col,
+                y=y_col,
+                color=color_col if has_color else None,
+                opacity=0.75,
+            )
+            fig.update_traces(
+                marker=dict(size=7),
+                hovertemplate=f"<b>{x_col}:</b> %{{x:,.2f}}<br><b>{y_col}:</b> %{{y:,.2f}}<extra></extra>",
+            )
+            corr_val = clean_df[x_col].corr(clean_df[y_col])
+            corr_str = f"{corr_val:.2f}" if pd.notna(corr_val) else "N/A"
+            style_dark_figure(fig, title=f"{x_col} vs {y_col}")
+            metrics = [
+                {"label": "Correlation (r)", "value": corr_str},
+                {"label": "Points", "value": f"{len(plot_sample):,}"},
+            ]
+            return fig, metrics
+
+        elif chart_type in ("grouped_bar", "grouped bar"):
+            metrics_list = [c.strip() for c in (y_col or "").split(",") if c.strip() in df.columns]
+            if not metrics_list:
+                return None, None
+            clean_df = df[[x_col] + metrics_list].dropna()
+            for m in metrics_list:
+                clean_df[m] = pd.to_numeric(clean_df[m], errors="coerce")
+            clean_df = clean_df.dropna()
+            grp = clean_df.groupby(x_col)[metrics_list].agg(agg_func.lower()).reset_index()
+            grp = grp.head(max_categories)
+            fig = px.bar(grp, x=x_col, y=metrics_list, barmode="group")
+            fig.update_yaxes(rangemode="tozero")
+            style_dark_figure(fig, title=f"Grouped Metrics by {x_col}")
+            return fig, None
+
+    except Exception as exc:
+        logger.exception("Failed to build custom dataset figure: %s", exc)
+        return None, None
+
+    return None, None
