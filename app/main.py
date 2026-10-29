@@ -61,7 +61,7 @@ import streamlit as st
 # Application imports
 # --------------------------------------------------------------------------
 
-from app.ui.analysis import _run_analysis
+from app.ui.analysis import _run_analysis, display_analysis_result
 from app.config import config
 from app.core.agent import (
     AgentCapacityError,
@@ -1232,104 +1232,8 @@ def _display_pie_chart(data: list) -> None:
 
 def _display_analysis_result() -> None:
     """Display the latest analysis result."""
+    display_analysis_result(st.session_state.last_result, chart_renderer=_display_chart)
 
-    result = st.session_state.last_result
-
-    if result is None:
-        return
-
-    st.html(
-        """
-        <div class="result-header-bar">
-            <div class="section-label">
-                ANALYSIS RESULT
-            </div>
-            <div class="result-badge">
-                Verified Output
-            </div>
-        </div>
-        """
-    )
-
-    for warning in getattr(result, "warnings", []):
-        st.warning(f"⚠️ {warning}")
-
-    insight_col, chart_col = st.columns((1, 1), gap="large")
-
-    with insight_col:
-        with st.container(border=True):
-            st.html(
-                """
-                <div class="card-header-badge ai-badge">
-                    <span class="badge-icon">✦</span>
-                    <span>AI EXECUTIVE INSIGHT</span>
-                </div>
-                """
-            )
-            if result.explanation:
-                st.subheader("Key insight")
-                st.write(result.explanation)
-            else:
-                st.subheader("Key insight")
-                st.caption("No explanation was generated for this result.")
-
-    with chart_col:
-        with st.container(border=True):
-            st.html(
-                """
-                <div class="card-header-badge chart-badge">
-                    <span class="badge-icon">📊</span>
-                    <span>VISUALIZATION ENGINE</span>
-                </div>
-                """
-            )
-            _display_chart(result.chart, query_result=result.query_result)
-
-    with st.container(border=True):
-        st.html(
-            """
-            <div class="card-header-badge table-badge">
-                <span class="badge-icon">📋</span>
-                <span>STRUCTURED QUERY RESULT</span>
-            </div>
-            """
-        )
-        st.subheader("Query result")
-
-        query_result = result.query_result
-
-        if query_result is not None:
-
-            if query_result.truncated:
-                st.caption(
-                    f"Rows returned: {query_result.row_count:,} "
-                    "| Reached the result limit; additional rows may be "
-                    "available."
-                )
-            else:
-                st.caption(
-                    f"Rows returned: {query_result.row_count:,}"
-                )
-
-            st.dataframe(
-                query_result.dataframe,
-                use_container_width=True,
-                hide_index=True,
-            )
-        else:
-            st.caption("No tabular result is available for this question.")
-
-    with st.expander("Generated SQL", expanded=False):
-        st.caption("Executed safely in sandboxed DuckDB query engine")
-        st.code(
-            result.sql,
-            language="sql",
-        )
-
-
-# --------------------------------------------------------------------------
-# Main application
-# --------------------------------------------------------------------------
 
 def main() -> None:
     """Run the Streamlit application."""
