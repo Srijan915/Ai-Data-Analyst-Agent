@@ -1,1183 +1,356 @@
 # 🤖 AI Data Analyst Agent
 
-[![Test](https://github.com/Dark-Frost009/ai-data-analyst-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Dark-Frost009/ai-data-analyst-agent/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.13-blue.svg)](https://www.python.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.54.0-FF4B4B.svg)](https://streamlit.io/)
+[![DuckDB](https://img.shields.io/badge/DuckDB-1.3.2-FFF000.svg)](https://duckdb.org/)
+[![Google Gemini](https://img.shields.io/badge/Google%20GenAI-Gemini%202.5%20Flash-4285F4.svg)](https://ai.google.dev/)
+[![SQLGlot](https://img.shields.io/badge/SQLGlot-27.14.0-darkgreen.svg)](https://github.com/tobymao/sqlglot)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-The optional hosted demo configuration is historical; validate the current deployment before relying on it.
+## 🎬 Project Demo
 
-An AI-powered data analysis application that allows users to upload CSV datasets and ask analytical questions using natural language.
+Watch the AI Data Analyst Agent analyze datasets, generate insights, and create interactive visualizations.
 
-The application converts natural-language questions into DuckDB-compatible SQL using Gemini, validates the generated SQL through an independent security layer, executes the validated query with DuckDB, and presents the results with tables, visualizations, and AI-generated explanations.
+![AI Data Analyst Agent Demo](screenshots/demo.gif)
 
----
 
-## 🎬 Preview
 
-A real run on the live app: upload a messy employee CSV, ask *"How many employees joined after 2022?"* in plain English, and get an AI-written insight, the result table and the SQL that produced it.
 
-<p align="center">
-  <img src="docs/images/demo.gif" alt="Demo: uploading a CSV, asking a question in plain English, and getting an insight, a result table and the generated SQL" width="100%">
-</p>
 
-> **Note:** The live demo needs an access code (it protects the AI usage quota), and the free host may take a moment to wake up if nobody has visited recently. The recording and screenshots here are taken from the actual deployed app.
 
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="docs/images/01-home.png" alt="Home screen with the CSV upload sidebar"><br>
-      <sub><b>1. Upload a CSV</b> from the sidebar to activate the analyst.</sub>
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/images/02-dataset-overview.png" alt="Dataset overview showing 1,020 rows, 12 columns, 211 missing values and a data preview"><br>
-      <sub><b>2. Dataset overview</b>: row, column and missing-value counts, plus a data preview.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="docs/images/03-dataset-profile.png" alt="Dataset profile table with pandas type, inferred type, null count and unique values per column"><br>
-      <sub><b>3. Dataset profile</b>: inferred types, nulls and unique values for every column.</sub>
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/images/04-ask-a-question.png" alt="Question box with 'How many employees joined after 2022?' and the Analyze button"><br>
-      <sub><b>4. Ask in plain English</b> and click Analyze.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <img src="docs/images/05-key-insight.png" alt="Key Insight section with summary, key value of 445, comparison and limitations"><br>
-      <sub><b>5. Key insight</b>: a summary, the key value and the limitations of the result.</sub>
-    </td>
-    <td width="50%" valign="top">
-      <img src="docs/images/06-query-result-sql.png" alt="Query result of 445 employees and the generated DuckDB SQL"><br>
-      <sub><b>6. Result and generated SQL</b>: the validated query that DuckDB ran.</sub>
-    </td>
-  </tr>
-</table>
+An enterprise-ready, autonomous AI Data Analyst Agent built with **Google Gemini**, **DuckDB**, **SQLGlot**, and **Streamlit**. The system converts plain-English analytical questions into optimized DuckDB SQL, verifies queries against an Abstract Syntax Tree (AST) security layer, executes them in a sandboxed SQL engine, validates narrative numbers against actual execution outputs, and renders interactive dark-themed charts and data tables.
+
+Repository: [https://github.com/Srijan915/Ai-Data-Analyst-Agent](https://github.com/Srijan915/Ai-Data-Analyst-Agent)
 
 ---
 
-## 🚀 Features
+## 📌 Project Overview
 
-### 📊 Natural-Language Data Analysis
+Traditional conversational analytics systems often suffer from two major flaws: **security risks** from running unvalidated AI-generated SQL directly on databases, and **AI hallucinations** where the LLM invents metrics and numbers that contradict actual query results.
 
-Ask questions about an uploaded dataset using plain English instead of writing SQL manually.
-
-Example questions:
-
-```text
-How many records are there?
-```
-
-```text
-What are the top 3 artists by average gross?
-```
-
-```text
-Which tours had an average gross greater than $5 million?
-```
-
-```text
-Which year had the highest total gross?
-```
-
-```text
-Show the average gross by artist.
-```
-
-The application dynamically generates SQL based on the uploaded dataset's schema.
-
-### 💬 Session-Local Follow-Up Questions
-
-After a successful analysis, ask a follow-up such as "Now show only the
-top 2." The planner receives up to three prior successful question and
-validated-SQL pairs from the current browser session.
-
-Conversation context is bounded, can be cleared from the sidebar, and is
-automatically reset when the active dataset changes. It is not durable
-storage, and every new SQL statement still passes the full validation and
-execution pipeline.
-
-### Bounded correction and verification
-
-Malformed planner output can receive at most one model-assisted repair (set
-`MAX_SQL_CORRECTION_ATTEMPTS` to adjust this). Every repaired statement passes
-the same SQLGlot table/function/limit validation before execution. The app also
-checks result metadata, labels empty or truncated results, and withholds an
-AI explanation that contains numeric claims not present in the returned data.
-
-Run the deterministic, no-network 50-case safety benchmark with:
-
-```powershell
-python -c "from app.core.offline_benchmark import run_offline_benchmark; print(run_offline_benchmark())"
-```
-
-It measures fixed-fixture answerability and SQL safety behavior; it does not
-claim live Gemini accuracy.
-
-### 📚 Multi-CSV sessions
-
-The sidebar accepts one or more CSV files. Each file is validated under the
-same upload, parsing, row, timeout and temporary-storage limits, then receives
-a session-private, collision-resistant DuckDB table name. Duplicate filenames
-remain distinct. The active table list is shown in the sidebar and all data is
-deleted when the session dataset is cleared. Relationship matches are only
-suggestions: the planner must not join tables until a relationship is confirmed.
+This AI Data Analyst Agent solves both challenges through an engineered defense-in-depth pipeline:
+1. **Isolated Responsibilities**: The LLM *never* interacts directly with the database; it only proposes SQL syntax.
+2. **AST-Level Security Validation**: Every proposed query is parsed into an Abstract Syntax Tree via **SQLGlot** and strictly validated against security rules (read-only enforcement, allowlisted tables, banned functions, row limits).
+3. **Deterministic Answerability & Grounding**: Natural language queries are checked prior to LLM submission (`assess_answerability`), and generated AI explanations are validated against the actual DuckDB result set (`explanation_is_grounded`) to withhold any unsupported numeric claims.
+4. **Session-Private Multi-Dataset Catalog**: Upload single or multiple CSVs into an isolated DuckDB database with automatic relationship detection and explicit human-in-the-loop join confirmation.
+5. **Modern Visualization Studio**: Automatically derives insights and renders interactive Plotly figures (bar, grouped bar, donut/pie, line, histogram, scatter) alongside raw result data.
 
 ---
 
-### 🧠 AI-Powered SQL Generation
+## 🏗️ System Architecture & Data Flow
 
-The application uses **Gemini** to translate natural-language analytical questions into DuckDB-compatible SQL.
+```mermaid
+flowchart TD
+    User([User Question / CSV Datasets]) --> Upload[CSV Ingestion & Disk Preparation]
+    Upload --> Catalog[Session-Isolated DuckDB Catalog\n& Dataset Profiler]
+    Catalog --> Gate{Deterministic\nAnswerability Gate}
+    
+    Gate -- Unanswerable / Missing Terms --> Clarify[Clarification / Error Notice]
+    Gate -- Answerable --> Planner[Query Planner\nGemini 2.5 Flash]
+    
+    Planner --> ASTCheck{SQLGlot AST\nSecurity Validation}
+    ASTCheck -- Rejected Unsafe SQL --> Reject[AgentValidationError]
+    ASTCheck -- Validated Clean SQL --> DuckDB[(DuckDB Sandbox\nResource-Limited Execution)]
+    
+    DuckDB --> ResultVerif{Result Verification\n& Grounding Check}
+    ResultVerif --> Visuals[Visualization Intelligence\nPlotly Engine]
+    ResultVerif --> Explainer[Explainer Engine\nGemini 2.5 Flash]
+    
+    Explainer --> GroundCheck{explanation_is_grounded\nNumeric Check}
+    GroundCheck -- Unsupported Claims --> Suppress[Explanation Withheld / Warning]
+    GroundCheck -- Grounded --> Insight[Verified Insight]
+    
+    Visuals --> UI[Streamlit Dark Dashboard]
+    Insight --> UI
+    DuckDB --> UI
+```
 
-The Query Planner:
-
-- Understands analytical intent.
-- Inspects the profile of the prepared execution DataFrame.
-- Uses only columns that exist in the dataset.
-- Preserves exact column names.
-- Generates read-only SQL.
-- Handles aggregation, filtering, grouping, ordering, ranking, and limits.
-- Handles numeric values stored as text.
-- Handles currency-formatted values.
-- Uses normalized datetime columns directly and treats remaining text dates conservatively.
-- Applies deterministic corrections for explicit monetary thresholds.
-
-The LLM is responsible for generating the analytical query, while security validation is handled independently.
+### Architectural Separation of Concerns
+- **LLM Boundary**: Google Gemini translates intent into query syntax; it has no database access, network sockets, or filesystem permissions.
+- **Security Boundary**: SQLGlot independently evaluates syntax trees before DuckDB receives any statements.
+- **Database Sandbox**: DuckDB runs with `enable_external_access=false`, strict RAM limits, thread caps, and timeout constraints.
+- **Grounding Boundary**: Narrative AI summaries are parsed for numbers, percentages, and financial metrics; any claim not found in the SQL result set is withheld.
 
 ---
 
-### 🛡️ SQL Security Validation
-
-Generated SQL is treated as **untrusted input**.
-
-Before execution, every generated query passes through a dedicated SQL security validation layer.
-
-The security layer uses **SQLGlot** to parse SQL into an Abstract Syntax Tree (AST) and validates the query against the application's safety rules.
-
-The validator checks:
-
-- SQL statement type
-- Table references
-- Function usage
-- Multiple SQL statements
-- Dangerous SQL operations
-- Query result limits
-- Read-only execution
-- Type conversions
-- Allowed SQL functions
-- Unqualified dataset table references only
-
-Unsafe SQL is rejected before reaching DuckDB.
-
-This creates a security boundary between the LLM and the database.
-
-DuckDB is also configured as a second line of defense: external
-file/network access and temporary-disk spilling are disabled, while memory,
-thread, result-size, and query-time limits constrain execution resources.
-
----
-
-### 🧮 Robust Numeric and Data Handling
-
-Real-world CSV datasets frequently contain numbers stored as strings rather than clean numeric values.
-
-The Query Planner supports patterns such as:
-
-```text
-1,234,567.89
-$1,234.50
-25%
-```
-
-For example, numeric text can be safely converted using:
-
-```sql
-TRY_CAST(...)
-```
-
-Thousands separators can be removed using:
-
-```sql
-REPLACE(...)
-```
-
-Currency values can be cleaned before conversion:
-
-```sql
-TRY_CAST(
-    REPLACE(
-        REPLACE(
-            CAST("Average gross" AS VARCHAR),
-            ',',
-            ''
-        ),
-        '$',
-        ''
-    ) AS DOUBLE
-)
-```
-
-The application deliberately avoids unsupported or unsafe SQL functions such as `REGEXP_REPLACE`.
-
----
-
-### 📅 Conservative Date Preparation
-
-Uploads retain their original values and dtypes for preview. Before planning,
-`execution_preparation.py` creates a separate DataFrame copy and normalizes
-only confidently detected calendar-date columns:
-
-- ISO dates in `YYYY-MM-DD` format.
-- US slash dates in `M/D/YYYY` or `MM/DD/YYYY` format, with at least one
-  day greater than 12 to establish month/day ordering.
-- Every non-null value must match the same format and parse successfully.
-
-Bare years, ambiguous dates such as a column containing only `12/7/2023`
-and `1/2/2022`, mixed formats, invalid dates and unsupported values remain
-unchanged. Null positions are preserved. Existing datetime dtypes, including
-timezones, are retained. CSV ingestion preserves text, including zero-padded IDs and literal `NA`/`NULL`
-labels; empty cells are the explicit missing-value convention. Execution preparation
-can normalize canonical, representable integer and decimal text separately, while
-leaving zero-padded IDs, bare years, mixed values and precision-sensitive numbers
-unchanged. Currency, percentages and booleans are not coerced during ingestion.
-
-The prepared DataFrame is re-profiled. The Query Planner receives that
-execution profile, and SQLExecutor receives the same prepared DataFrame.
-The planner uses `pandas_dtype` as the physical type; semantic inference alone
-does not mean a text column has become a datetime column.
-
-For normalized datetime columns, predicates and date functions use the column
-directly:
-
-```sql
-SELECT "First_Name", "Last_Name"
-FROM "dataset"
-WHERE "Join_Date" > DATE '2022-12-31'
-```
-
-The planner is instructed not to wrap normalized dates in `TRY_CAST` or
-`TRY_STRPTIME`, and not to guess formats for ambiguous or mixed text dates.
-Future safe coercions can extend this preparation layer. CSV loading, SQL
-execution, validation and runtime protections retain their existing roles.
-
----
-
-### 💰 Explicit Monetary Threshold Handling
-
-The Query Planner includes deterministic handling for explicit monetary quantities.
-
-Examples:
-
-```text
-$5 million
-$10 million
-$2.5 million
-$750 thousand
-$1 billion
-$5M
-$750K
-```
-
-These are converted to their mathematical equivalents:
-
-```text
-$5 million      → 5000000
-$10 million     → 10000000
-$2.5 million    → 2500000
-$750 thousand   → 750000
-$1 billion      → 1000000000
-```
-
-This is a narrow safeguard, not proof of semantic correctness. It only changes a single unambiguous monetary comparison. Unknown terms (including box office, budget and turnover), multiple quantities, and ambiguous expressions leave SQL unchanged. Always inspect important results.
-
----
-
-## 🏗️ Architecture
-
-The application follows a controlled pipeline that separates data processing, AI reasoning, security validation, SQL execution, and result presentation.
-
-```text
-                         User
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │  Streamlit UI   │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │   Data Loader   │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │  Data Profiler  │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │    AI Agent     │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │ Prepare Typed   │
-                  │ Copy + Profile  │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │  Query Planner  │
-                  │     Gemini      │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │ SQL Security    │
-                  │ Validator       │
-                  │    SQLGlot      │
-                  └────────┬────────┘
-                           │
-                     Valid SQL
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │  SQL Executor   │
-                  │     DuckDB      │
-                  └────────┬────────┘
-                           │
-                           ▼
-                  ┌─────────────────┐
-                  │ Query Results   │
-                  └───────┬─────────┘
-                          │
-                 ┌────────┴────────┐
-                 ▼                 ▼
-        ┌─────────────────┐ ┌─────────────────┐
-        │ Chart Generator │ │    Explainer    │
-        └────────┬────────┘ └────────┬────────┘
-                 │                   │
-                 └─────────┬─────────┘
-                           ▼
-                    Results in UI
-```
-
----
-
-## 🔄 Request Flow
-
-1. The user uploads a CSV dataset.
-2. The Data Loader reads and prepares the dataset.
-3. The Data Profiler analyzes the dataset structure and columns.
-4. The user asks an analytical question in natural language. For a
-   follow-up, the planner may also receive bounded context from prior
-   successful turns in the same browser session.
-5. The agent prepares a typed copy and re-profiles it; the Query Planner receives
-   the question and execution profile.
-6. Gemini generates a DuckDB-compatible SQL query.
-7. The generated SQL is treated as untrusted input.
-8. SQLGlot parses and validates the SQL.
-9. Security rules verify that the query is read-only and accesses only approved resources.
-10. Unsafe or invalid SQL is rejected.
-11. Valid SQL is passed to the SQL Executor.
-12. DuckDB executes the analytical query against the prepared execution DataFrame.
-13. The result is processed by the application.
-14. The Chart Generator determines whether a visualization is useful.
-15. The Explainer generates a concise analytical interpretation.
-16. The Streamlit interface presents the result.
-
----
-
-## 🔐 Security Model
-
-The application follows a **defense-in-depth** approach.
-
-The LLM prompt provides instructions, but the application does not rely on the LLM to enforce security.
-
-```text
-LLM Instructions
-       │
-       ▼
-Query Planner
-       │
-       ▼
-SQLGlot AST Validation
-       │
-       ├── Statement validation
-       ├── Table validation
-       ├── Function allowlist
-       ├── Dangerous operation checks
-       ├── Multiple statement checks
-       └── Result limit enforcement
-       │
-       ▼
-    Safe SQL
-       │
-       ▼
-    DuckDB
-```
-
-The validator rejects operations such as:
-
-```text
-INSERT
-UPDATE
-DELETE
-DROP
-ALTER
-CREATE
-TRUNCATE
-COPY
-ATTACH
-DETACH
-INSTALL
-LOAD
-CALL
-EXPORT
-IMPORT
-```
-
-The application is designed specifically for read-only analytical workloads.
-
----
-
-## 🧪 Example Analytical Queries
-
-The agent has been tested with analytical questions involving different SQL patterns.
-
-### Record counting
-
-Question:
-
-```text
-How many records are there?
-```
-
-Generated SQL:
-
-```sql
-SELECT COUNT(*) FROM "dataset"
-```
-
----
-
-### Ranking with aggregation
-
-Question:
-
-```text
-What are the top 3 artists by average gross?
-```
-
-Generated SQL:
-
-```sql
-SELECT
-    "Artist",
-    AVG(
-        TRY_CAST(
-            REPLACE(
-                REPLACE(
-                    CAST("Average gross" AS VARCHAR),
-                    ',',
-                    ''
-                ),
-                '$',
-                ''
-            ) AS DOUBLE
-        )
-    ) AS "Average Gross"
-FROM "dataset"
-GROUP BY "Artist"
-ORDER BY "Average Gross" DESC
-LIMIT 3
-```
-
-This demonstrates:
-
-- `AVG`
-- `GROUP BY`
-- numeric conversion
-- text cleaning
-- `ORDER BY`
-- descending ranking
-- `LIMIT`
-
----
-
-### Monetary filtering
-
-Question:
-
-```text
-Which tours had an average gross greater than $5 million?
-```
-
-Generated SQL can safely convert the text-based monetary column before applying the threshold:
-
-```sql
-SELECT
-    "Tour title",
-    "Average gross"
-FROM "dataset"
-WHERE TRY_CAST(
-    REPLACE(
-        REPLACE(
-            CAST("Average gross" AS VARCHAR),
-            ',',
-            ''
-        ),
-        '$',
-        ''
-    ) AS DOUBLE
-) > 5000000
-```
-
----
-
-### Grouping and counting
-
-Question:
-
-```text
-How many tours are there for each year?
-```
-
-Generated SQL:
-
-```sql
-SELECT
-    "Year(s)",
-    COUNT(*) AS tour_count
-FROM "dataset"
-GROUP BY "Year(s)"
-ORDER BY "Year(s)"
-```
-
----
-
-## 📈 Result Presentation
-
-Depending on the analytical result, the application can present:
-
-- Query results in a table
-- Generated SQL
-- Result metadata
-- Visualizations when appropriate
-- AI-generated analytical explanations
-- Important values and patterns
-- Rankings and comparisons
-- Limitations of the result
-
-The goal is to provide both the **answer** and enough information to understand how the answer was produced.
-
----
-
-## Correctness and Hosting Limits
-
-- Original CSV headers are checked before parsing; duplicate/blank headers and
-  ragged rows are rejected. Lexical values remain text in the preview.
-- After SQL security validation, a separate conversion check rejects unresolved
-  text dates and numeric conversions that discard values, round away precision
-  or overflow. Common literal `REPLACE`/`TRIM` cleanup is checked across every
-  non-null value. Unverifiable conversions of derived aliases/aggregates are
-  declined; use prepared columns directly or clean the input explicitly.
-- Charts preserve grouping dimensions. Multiple categorical dimensions or
-  duplicate categories without proven additive metrics are left in the table.
-  Only simple top-level `SUM` and non-distinct `COUNT` outputs authorize an
-  additive "Other" bucket. Averages, ratios and distinct counts use disclosed
-  subsets instead; non-additive SQL metrics are not rendered as pie slices.
-- Line/scatter charts sample evenly across the full returned range when capped,
-  and disclose omitted rows and series. Samples can omit intermediate outliers.
-- A rejected replacement upload pauses analysis and clears stale results and
-  follow-up context. Retry the selection, select a valid CSV, or remove the
-  rejected upload to explicitly resume the previous dataset.
-- Default upload limit is **100 MB per CSV**, with **200 columns**. Small CSVs
-  use the pandas workflow (up to **100,000 rows**); uploads above 1 MB, or
-  compact CSVs exceeding the pandas budget, use a private disk-backed DuckDB
-  database (up to **2,000,000 rows**). DataFrame memory reservations remain
-  **128 MB per session** and **256 MB across sessions**; these do not include
-  Streamlit's upload buffers or DuckDB's separate query memory budget.
-  Reservations conservatively account for raw and execution copies. Preparation
-  is serialized; clearing/replacing a dataset releases its reservation.
-  Row/column checks and a string-memory estimate run before pandas allocation.
-- Questions are limited to **2,000 characters**; combined model input is limited
-  to **48,000 characters**. Sample text is shortened at **256 characters** with a
-  notice. Identifiers and questions are never silently shortened. Oversized
-  schemas are rejected before a provider request; explanations have the same
-  input budget. Character budgets are conservative input controls, not exact
-  token counts or a guarantee against provider-specific rate limits.
-- Application logs record SQL length, status, timings and analysis IDs instead
-  of full SQL. Exception bodies and tracebacks are suppressed because they can
-  include private filter values. Dataset filenames/column normalization metadata
-  may still appear; restrict access and retention for hosting logs.
-
-Large-file preparation copies the raw CSV unchanged to a private temporary
-folder and scans bounded batches (at most 5,000 rows or about 4 MB). Date and
-numeric candidates must pass every batch; any ambiguity or invalid value keeps
-the column as text. US date ordering evidence may appear in a later batch.
-Numeric columns that require different types in different batches are kept as
-text conservatively. No conversion occurs in the loader or original executor.
-
-SQL runs against the complete typed database, opened read-only with external
-access and intermediate disk spilling disabled. Displayed results are limited
-to 16 MB and the existing row limit. Type-conversion checks scan full data when
-needed, within the query time budget. Preview/statistical profiles retain at
-most 1,000 rows from the first bounded batch: unique counts/min/max/mean are
-sample statistics; row counts, null counts and SQL answers cover all rows.
-
-Temporary storage defaults to 512 MB per dataset and 1,024 MB per process,
-reserved before preparation. Loading has a 180-second time limit. Clearing,
-replacement, failed preparation and session-object garbage collection remove
-files; timed-out query workers retain their files until they finish. Garbage
-collection is not an immediate browser-disconnect callback. Runtime directories use OS owner locks. On the next process startup/first
-disk upload, application-marked crash leftovers are reaped while live owners
-are skipped. Legacy unmarked temporary folders are left for host cleanup.
-CSV fields over 1 MB, physical lines over 2 MB or rows over about 4 MB are
-rejected so a single oversized record cannot bypass the batch budget.
-
-This adds no paid services or dependencies. Streamlit's uploader itself holds
-file bytes in memory, outside these batch controls, and free hosting still has
-finite resources. A 100 MB upload limit is an acceptance ceiling, not a promise
-that every file or query fits every free host. Local execution on your own
-computer supports the same workflow without requiring paid hosting. Adjust
-both frontend and application limits together when changing the default.
-See [Streamlit upload storage](https://docs.streamlit.io/knowledge-base/using-streamlit/where-file-uploader-store-when-deleted)
-and [Community Cloud resource guidance](https://docs.streamlit.io/knowledge-base/deploy/resource-limits).
-
-Limits are configurable in `.env.example`. If changing the upload limit, also
-adjust `.streamlit/config.toml` so the frontend agrees. Dataset reservations and
-DuckDB connection limits are safeguards, not an operating-system memory cap;
-perform bounded load tests before increasing them for a shared host.
-
----
-
-## 🧩 Project Structure
-
-```text
-ai-data-analyst-agent/
-│
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── config.py
-│   │
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── agent.py
-│   │   ├── chart_generator.py
-│   │   ├── data_loader.py
-│   │   ├── data_profiler.py
-│   │   ├── execution_preparation.py
-│   │   ├── numeric_preparation.py
-│   │   ├── semantic_checks.py
-│   │   ├── explainer.py
-│   │   ├── llm_client.py
-│   │   ├── query_planner.py
-│   │   └── sql_executor.py
-│   │
-│   ├── models/
-│   │   ├── __init__.py
-│   │   └── schemas.py
-│   │
-│   ├── prompts/
-│   │   ├── __init__.py
-│   │   └── query_planner.py
-│   │
-│   ├── ui/
-│   │   ├── analysis.py
-│   │   └── styles.css
-│   │
-│   └── utils/
-│       ├── __init__.py
-│       ├── analysis_capacity.py
-│       ├── logger.py
-│       └── security.py
-│
-├── data/
-│   └── sample/
-│       └── .gitkeep
-│
-├── tests/
-│   ├── .gitkeep
-│   ├── test_agent.py
-│   ├── test_analysis_capacity.py
-│   ├── test_config.py
-│   ├── test_chart_generator.py
-│   ├── test_data_loader.py
-│   ├── test_data_profiler.py
-│   ├── test_execution_preparation.py
-│   ├── test_review_regressions.py
-│   ├── test_explainer.py
-│   ├── test_llm_client.py
-│   ├── test_query_planner.py
-│   ├── test_schemas.py
-│   ├── test_security.py
-│   ├── test_sql_executor.py
-│   └── test_ui_error_handling.py
-│
-├── .env.example
-├── .gitignore
-├── .streamlit/
-│   └── config.toml
-├── pytest.ini
-├── requirements.txt
-└── README.md
-```
+## ✨ Key Features
+
+### 📊 Multi-Dataset Management & Relationship Engine
+- **Session-Private DuckDB Catalog**: Upload one or more CSV files into an ephemeral DuckDB database (`DatasetCatalog`).
+- **Sanitized Table Names**: Safe, collision-resistant table identifiers (`ds_<stem>_<hash>`) prevent SQL injection and naming conflicts.
+- **Relationship Discovery**: Detects shared columns, matching inferred types, and calculates exact value overlap percentages between tables.
+- **Human-in-the-Loop Joins**: Multi-table queries require explicit user confirmation of detected relationships before joins can be planned, eliminating hallucinated or cross-product joins.
+
+### 🧠 Gemini-Powered Natural Language Analysis
+- **Schema-Aware Query Planning**: Powered by Google's `gemini-2.5-flash`, the planner receives clean column profiles, data types, and sample distributions.
+- **Conversational Context**: Supports follow-up questions within the active session, retaining up to three previous question-and-SQL turns.
+- **Complex Data Normalization**: Intelligently handles messy real-world formats including currency symbols (`$`, `€`), comma thousand-separators, percentages, and ISO/US calendar dates.
+
+### 🛡️ Multi-Layer SQL Security Validation
+- **AST Parsing**: SQLGlot inspects the query syntax tree rather than relying on brittle regex matching.
+- **Read-Only Enforcement**: Blocks `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, `PRAGMA`, `COPY`, and file exports.
+- **Function Whitelist**: Only authorized aggregate and mathematical functions are permitted; malicious functions like `system()`, `read_csv()`, or `read_parquet()` are strictly blocked.
+- **Enforced Row Limits**: Automatically verifies or injects query output limits (`LIMIT 10000`).
+
+### 🔍 Numeric Grounding & Hallucination Defense
+- **Automated Verification**: The `explanation_is_grounded` module extracts every numeric claim, percentage, currency figure, and multiplier (K, M, B) from the AI-written summary.
+- **Data Cross-Check**: Every claim is cross-referenced with values present in the query result dataframe and row count.
+- **Suppression Mechanism**: If an explanation makes unverified numeric assertions, the explanation is suppressed and replaced with a transparent warning.
+
+### 🎨 Dark-Themed Streamlit Analytics Dashboard
+- **Custom CSS Design**: Styled with a tailored modern dark theme, status indicator chips, and responsive containers.
+- **Automated Dataset Insights**: Instant high-level summary cards (rows, columns, memory, missing values) and automatically generated initial charts upon upload.
+- **Interactive Visualizer Studio**: Direct dataset charting allowing users to build custom visuals independent of AI queries:
+  - **Bar Charts**: Vertical and horizontal orientations with custom aggregations (Sum, Mean, Median, Max, Min).
+  - **Grouped Bar Charts**: Compare multiple numeric metrics across categorical groups.
+  - **Donut / Pie Charts**: Proportional distributions with configurable slice limits.
+  - **Line Charts**: Time-series or sequential tracking with optional multi-series color grouping.
+  - **Histograms**: Continuous variable distributions with optional marginal box plots.
+  - **Scatter Plots**: Two-variable numeric correlation analysis with optional categorical color dimensions.
+- **Contextual Suggested Prompts**: Dynamic suggestions derived from the active dataset's numeric and categorical schema to jumpstart analysis.
+- **Rich Result Display**: Execution runtimes, formatted SQL query inspector, interactive dataframe tables, and generated Plotly figures.
 
 ---
 
 ## 🛠️ Technology Stack
 
-| Technology | Purpose |
-|---|---|
-| **Python** | Core application language |
-| **Streamlit** | Web application interface |
-| **Gemini** | LLM inference and SQL generation |
-| **gemini-2.5-flash (configurable)** | Default Gemini model |
-| **DuckDB** | Local analytical SQL execution |
-| **SQLGlot** | SQL parsing and security validation |
-| **Pandas** | Dataset processing |
-| **Pydantic** | Data validation and schemas |
-| **Pytest** | Automated testing |
+| Layer | Technology | Version | Purpose |
+| :--- | :--- | :--- | :--- |
+| **Language** | Python | `3.11+ / 3.13` | Application runtime |
+| **Web UI** | Streamlit | `1.54.0` | Dark-themed interactive web dashboard & state management |
+| **AI / LLM** | Google GenAI SDK | `2.33.0` | Gemini 2.5 Flash query planning & narrative explanation |
+| **Database** | DuckDB | `1.3.2` | High-performance in-process analytical SQL database & session catalog |
+| **SQL Security** | SQLGlot | `27.14.0` | Abstract Syntax Tree (AST) parsing & security validation |
+| **Data Processing** | Pandas | `2.3.2` | Data loading, manipulation, and schema profiling |
+| **Visualizations** | Plotly | `6.3.0` | Dark-themed responsive charts (bar, grouped bar, pie/donut, line, histogram, scatter) |
+| **Schema Validation**| Pydantic | `2.12.5` | Type-safe structured models & schemas |
+| **Configuration** | Python-dotenv | `1.2.2` | Environment variable management |
+| **Network & SSL** | Truststore / HTTPX | `0.10.5` | Enterprise and platform TLS root certificate verification |
+| **Test Suite** | Pytest & Pytest-Cov | `9.0.3` / `7.1.0` | Unit, integration, security, and offline benchmark testing |
 
 ---
 
-## Sharing the source for review
+## 📁 Project Structure
 
-Share this GitHub repository or download its source from GitHub's **Code →
-Download ZIP** menu. That download contains the committed source rather than
-the contents of your local working folder. No archive is generated by the app.
-
-Avoid compressing the entire local project folder: `.gitignore` controls Git
-tracking, not what Windows includes in an archive. Local `.env`, `.venv`,
-`.streamlit/secrets.toml`, `.coverage`, caches, logs and temporary scripts must
-stay out of shared files. Coverage databases can contain local filesystem
-paths and become stale. Use a fresh `pytest -q` report to verify coverage;
-the reported test count and percentage depend on the exact revision and run.
-
----
-
-## 📦 Installation
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Dark-Frost009/ai-data-analyst-agent.git
-cd ai-data-analyst-agent
+```text
+ai-data-analyst-agent/
+├── .github/                     # CI/CD workflows and automated checks
+├── .streamlit/                  # Streamlit server & UI configuration
+├── app/
+│   ├── core/                    # Core business logic & pipeline orchestration
+│   │   ├── agent.py             # Main DataAnalystAgent pipeline orchestrator
+│   │   ├── answerability.py     # Pre-LLM deterministic answerability gate
+│   │   ├── chart_generator.py   # Plotly chart generation & automated dataset visuals
+│   │   ├── dataset_catalog.py   # Multi-dataset DuckDB catalog & relationship engine
+│   │   ├── data_loader.py       # Safe CSV loading, encoding checks & size validation
+│   │   ├── data_profiler.py     # Schema inspection & column profiling
+│   │   ├── disk_dataset.py      # Disk-backed dataset storage for large files
+│   │   ├── execution_preparation.py # Canonical type and date normalization
+│   │   ├── explainer.py         # Gemini-powered natural-language explanation
+│   │   ├── llm_client.py        # Gemini client adapter with timeout & quota budgets
+│   │   ├── query_planner.py     # Natural language to DuckDB SQL planning
+│   │   ├── result_verifier.py   # Result integrity checks & numeric grounding validation
+│   │   ├── semantic_checks.py   # Data fidelity verification
+│   │   └── sql_executor.py      # Sandboxed DuckDB execution engine
+│   ├── models/
+│   │   └── schemas.py           # Pydantic data models & state structures
+│   ├── prompts/
+│   │   └── query_planner.py     # Schema-grounded prompt templates for Gemini
+│   ├── ui/
+│   │   ├── analysis.py          # Streamlit analysis execution & rendering helpers
+│   │   └── styles.css           # Workspace dark analytics stylesheet
+│   ├── utils/
+│   │   ├── analysis_capacity.py # Concurrency limiters
+│   │   ├── dataset_resources.py # Dataset memory & row budget guards
+│   │   ├── logger.py            # Structured logging utilities
+│   │   ├── prompt_budget.py     # Token and prompt character length budgeting
+│   │   ├── request_budget.py    # Hourly LLM rate-limiting
+│   │   ├── security.py          # SQLGlot AST validation & SQL safety rules
+│   │   └── temporary_storage.py # Safe session temp directory management
+│   ├── config.py                # Centralized, immutable typed application configuration
+│   └── main.py                  # Streamlit application entry point
+├── data/
+│   └── sample/                  # Optional sample datasets for local testing
+├── docs/                        # Project documentation & visual assets
+├── scripts/                     # Operational checks & verification scripts
+├── tests/                       # Comprehensive automated test suite
+│   ├── fixtures/                # Offline benchmark datasets & test cases
+│   └── test_*.py                # Component, security, and integration tests
+├── .env.example                 # Example environment variables template
+├── OPERATIONS.md                # Operational guidelines & runbook
+├── pytest.ini                   # Pytest configuration
+├── requirements.txt             # Pinned project dependencies
+└── README.md                    # Project documentation
 ```
 
-### 2. Create a virtual environment
+---
 
-Windows PowerShell:
+## ## 📷 Application Screenshots
 
+The following screenshots showcase the current AI Data Analyst Agent dashboard and its analytics workflow.
+
+### 1. Dashboard & Dataset Overview
+
+View dataset dimensions, missing-value statistics, and the active analysis workspace.
+
+![AI Data Analyst Agent Dashboard](screenshots/dashboard.png)
+
+### 2. Automated Dataset Visualizations
+
+Explore automatically generated charts and dataset-level insights.
+
+![Automated Dataset Visualizations](screenshots/visualizations.png)
+
+### 3. Natural Language Query & AI Analysis
+
+Ask analytical questions in plain English and inspect the resulting insights and verified output.
+
+![Natural Language Query and Analysis](screenshots/query-analysis.png)
+
+### 4. Interactive Chart Exploration
+
+Explore dataset trends and distributions using interactive visualizations.
+
+![Interactive Chart Exploration](screenshots/chart-details.png)
+
+
+---
+
+## 💻 Installation & Setup (Windows)
+
+### Prerequisites
+- **Python 3.11** or **Python 3.13** installed on your system.
+- **Git** command-line tools.
+- A **Google Gemini API Key** (obtainable from [Google AI Studio](https://aistudio.google.com/)).
+
+### 1. Clone the Repository
+Open PowerShell and clone the project:
+```powershell
+git clone https://github.com/Srijan915/Ai-Data-Analyst-Agent.git
+cd Ai-Data-Analyst-Agent
+```
+
+### 2. Create and Activate a Virtual Environment
 ```powershell
 python -m venv .venv
-```
-
-### 3. Activate the virtual environment
-
-```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 4. Install dependencies
+*(If script execution is disabled in PowerShell, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first).*
 
+### 3. Install Dependencies
+Install all required pinned packages:
 ```powershell
 pip install -r requirements.txt
 ```
 
----
+### 4. Configure Environment Variables
+Copy the example environment template to `.env`:
+```powershell
+Copy-Item .env.example .env
+```
 
-## 🔑 Environment Configuration
+Open `.env` in your editor and configure your Gemini API key:
+```dotenv
+# Required for natural-language query planning and explanations
+GEMINI_API_KEY=your_actual_gemini_api_key_here
 
-The app uses Gemini through the provider-independent `LLMClient` interface. No
-AWS account, SDK, credential file, region or role is required.
-
-For local development copy `.env.example` to `.env`, then enter your key
-privately in that ignored file. Never paste credentials into chat or commit them.
-Startup, CSV uploads and offline tests work without a key; analysis needs one.
-
-```text
+# Language Model Configuration
 LLM_PROVIDER=gemini
 LLM_MODEL_ID=gemini-2.5-flash
-GEMINI_API_KEY=
+LLM_CONNECT_TIMEOUT_SECONDS=5
+LLM_READ_TIMEOUT_SECONDS=45
+
+# Application Environment
 APP_ENV=development
+LOG_LEVEL=INFO
+
+# Optional access gate for shared/hosted demos (leave blank for local dev)
 APP_ACCESS_PASSWORD=
 ```
 
-The default model is configurable, and availability must be checked for your
-account before a live demo. Gemini quotas and supported models can change;
-your account console limits take precedence. See
-[Gemini API documentation](https://ai.google.dev/gemini-api/docs) for current
-model availability and account limits.
+> [!WARNING]
+> Never commit your `.env` file or expose your API keys. The `.env` file is explicitly ignored in `.gitignore`.
 
-Free quotas are limited. A successful analysis normally makes two requests
-(planning and explanation), with prompts and completion budgets consuming
-quota. The adapter has no automatic retries, paid-provider fallback, tools,
-or automatic model substitution. Quota exhaustion requires trying later.
-Completion budgets are 2,048 for planning and 1,024 for explanations.
-Truncated completions fail safely. These choices have offline contract tests,
-not a live model-accuracy claim.
-[Google Gen AI SDK](https://github.com/googleapis/python-genai).
-
-Other settings and defaults are in `.env.example`: upload/result size,
-query timeout, one concurrent analysis per process, DuckDB memory/thread
-limits, and provider timeouts. Only `gemini` is implemented; other provider
-names fail explicitly. Gemini receives one combined SDK request timeout; the
-configured connect/read values are added because this SDK version does not
-expose separate controls. `HttpRetryOptions(attempts=1)` performs no retry.
-
-## ▶️ Running locally
-
-```powershell
-python -m streamlit run app/main.py
-```
-
-Open [localhost:8501](http://localhost:8501). Local development can omit the
-access password; shared deployments must set it.
-
-## ☁️ Direct Streamlit deployment
-
-This project intentionally uses a direct Python/Streamlit deployment, not a
-container image. Its existing layout is compatible with Streamlit Community
-Cloud: `requirements.txt` and `.streamlit/config.toml` are at the repository
-root, and the entry point is `app/main.py`.
-
-To deploy with Streamlit Community Cloud after an approved commit, create an
-app, select this repository and the branch you intend to release, set the
-entry point to `app/main.py`, and select Python 3.13 in **Advanced settings**
-to match the verified environment. Configure these top-level values privately
-in **Advanced settings → Secrets**:
-
-```toml
-APP_ENV = "production"
-APP_ACCESS_PASSWORD = "replace-with-your-private-demo-password"
-GEMINI_API_KEY = "replace-with-your-private-gemini-key"
-LLM_PROVIDER = "gemini"
-LLM_MODEL_ID = "gemini-2.5-flash"
-MAX_CONCURRENT_ANALYSES = "1"
-```
-
-These are placeholders, not working credentials. Community Cloud makes these
-top-level values available as environment variables. Never commit
-`.streamlit/secrets.toml`. In production a missing password locks the
-interface; retain this gate for the shared demo. It is a shared access code,
-not individual accounts or tenant isolation.
-[Streamlit secrets guide](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management),
-[top-level environment variables](https://docs.streamlit.io/develop/concepts/connections/secrets-management).
-
-After configuring privately, use the synthetic evaluation CSV under
-`tests/fixtures/` to check real answers against the expected results. Model
-access, actual response quality, latency and account quotas need this live
-check; passing offline tests cannot establish them. No hosted URL is claimed
-until those checks are completed. Other managed Streamlit hosts can use the
-same direct setup when they support Python 3.13, install `requirements.txt`,
-run `streamlit run app/main.py`, and securely inject the listed environment
-variables.
-
----
-
-## 🧪 Testing
-
-The project includes automated tests covering the major application components.
-
-Run the complete test suite:
-
-```powershell
-pytest -q
-```
-
-The suite measures coverage for `app/` and enforces a minimum total coverage
-of **70%**. The exact result is reported by every test run.
-
-The offline semantic fixtures are in `tests/fixtures/analysis.csv` and
-`analysis_cases.json`. Their response SQL is handwritten; expected rows are
-checked through the real planner, security validator and DuckDB executor.
-They cover counting, aggregate ranking, monetary/year filters, string
-literals and empty results. They do not measure Gemini's question-to-SQL
-accuracy. The UI tests stub the unsupported AppTest upload widget boundary
-and remote model, while exercising CSV parsing, analysis buttons, results,
-charts, all seven error branches, replacement and reset behavior.
-
-The test suite covers:
-
-- Agent behavior
-- Chart generation
-- Data loading
-- Data profiling
-- Conservative date preparation, source immutability and null preservation
-- Execution-schema alignment and the employee-after-2022 regression
-- Explanation generation
-- LLM client behavior
-- Query planning
-- Pydantic schemas
-- SQL security validation
-- SQL execution
-- Configuration validation
-- Streamlit-safe error presentation
-- Streamlit startup smoke rendering
-- Analysis-capacity control
-- DuckDB timeout, interruption, and disk-spill protection
-- Session-local follow-up context and reset behavior
-- Offline end-to-end evaluation scenarios
-
-Security tests specifically verify that unsafe SQL operations are rejected.
-
-Run the application manually after changes that affect the interface:
-
+### 5. Run the Application
+Launch the Streamlit web dashboard:
 ```powershell
 streamlit run app/main.py
 ```
 
-Useful manual checks include replacing an uploaded CSV with another file of
-the same name, clearing the active dataset, an unavailable Gemini service,
-and a query that reaches the configured result limit.
-
-GitHub Actions runs automatically on every push and pull request. It installs
-the pinned Python dependencies, checks known advisories, and runs the full
-test suite with the coverage floor.
+The application will start locally at `http://localhost:8501`.
 
 ---
 
-## 🚢 Deployment Checklist
+## ⚙️ Configuration Reference
 
-See [OPERATIONS.md](OPERATIONS.md) for production defaults, quota controls,
-health monitoring, crash cleanup, smoke tests and rollback instructions.
+All settings can be configured via environment variables or your local `.env` file:
 
-- Keep `APP_ENV=production` and a strong private `APP_ACCESS_PASSWORD`.
-- Set `GEMINI_API_KEY` privately and verify the model in your account.
-- Run `pytest -q` on Python 3.13 and review the live synthetic-data answers.
-- Check resource limits and quota before sharing the demo.
-- Configure `DEPLOYMENT_HEALTH_URL` only after a hosted health endpoint is
-  available; the repository health probe skips when it is unset.
-- Use only data you are authorized to send to the hosting service and Gemini.
-
-No deployment or account changes are performed by the offline test suite.
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `GEMINI_API_KEY` | *(Required)* | Google Gemini API key for query planning and explanation. |
+| `LLM_PROVIDER` | `gemini` | Language model provider adapter. |
+| `LLM_MODEL_ID` | `gemini-2.5-flash` | Gemini model identifier used for analysis. |
+| `LLM_CONNECT_TIMEOUT_SECONDS` | `5` | Network connection timeout for Gemini API calls. |
+| `LLM_READ_TIMEOUT_SECONDS` | `45` | Response read timeout for Gemini API calls. |
+| `APP_ENV` | `development` | Runtime environment (`development` or `production`). |
+| `APP_ACCESS_PASSWORD` | *(Empty)* | Optional access password gate for shared deployments. |
+| `MAX_UPLOAD_SIZE_MB` | `100` | Maximum allowed size per uploaded CSV file. |
+| `MAX_DATASET_ROWS` | `100000` | Maximum rows retained in standard pandas memory mode. |
+| `MAX_DISK_DATASET_ROWS` | `2000000` | Maximum rows allowed for large datasets using disk-backed DuckDB. |
+| `MAX_QUERY_RESULT_ROWS` | `10000` | Hard cap on rows returned by SQL query execution. |
+| `QUERY_TIMEOUT_SECONDS` | `30` | Timeout for DuckDB SQL query execution. |
+| `MAX_CONCURRENT_ANALYSES` | `1` | Maximum simultaneous analyses per application process. |
+| `MAX_LLM_REQUESTS_PER_HOUR` | `60` | Rolling hourly quota budget for Gemini API requests. |
+| `DUCKDB_MEMORY_LIMIT` | `512MB` | DuckDB execution memory limit ceiling. |
+| `DUCKDB_THREAD_LIMIT` | `2` | DuckDB worker thread limit ceiling. |
 
 ---
 
-## 🧱 Design Principles
+## 🗄️ Multi-Dataset Behavior & Limitations
 
-### Separation of Responsibilities
+### How Multi-Dataset Analysis Works
+1. **Isolated DuckDB Materialization**: When you upload multiple CSVs, each file is ingested and converted into an isolated table inside a session-private DuckDB database (`catalog.duckdb`).
+2. **Safe Namespacing**: Filenames are sanitized into deterministic identifiers (e.g., `ds_sales_data_a1b2c3d4e5`), preventing SQL injection via crafted filenames.
+3. **Automatic Relationship Inference**: The catalog scans uploaded tables for:
+   - Matching column names (case-insensitive).
+   - Compatible inferred types (e.g., `integer` to `integer`).
+   - Value overlap percentages calculated using distinct sets.
+4. **Human-in-the-Loop Join Confirmation**:
+   - Relationship suggestions **never** authorize joins automatically.
+   - You must review and confirm suggestions in the sidebar.
+   - If a user asks a query requiring a join on an unconfirmed relationship, the pre-LLM gate (`assess_answerability`) pauses execution and requests confirmation.
 
-Each component has a focused responsibility:
+### Current Limitations
+- **CSV Support Only**: Multi-dataset management currently supports CSV format (Excel `.xlsx` and direct SQL connections are not supported).
+- **Session-Private Lifecycle**: Catalogs are ephemeral and bounded to your browser session. Clearing the dataset removes all temporary tables and DuckDB files from disk.
+- **Resource Limits**: Ingestion and catalog sizes are constrained by configured memory (`MAX_TOTAL_DATASET_MEMORY_MB`) and disk (`MAX_TOTAL_DATASET_DISK_MB`) budgets.
 
-```text
-Data Loader
-     ↓
-Raw Data Profiler
-     ↓
-Execution Preparation (typed copy)
-     ↓
-Execution Data Profiler
-     ↓
-Query Planner
-     ↓
-Security Validator
-     ↓
-SQL Executor
-     ↓
-Result Processing
-     ↓
-Visualization + Explanation
+---
+
+## 🧪 Testing & Verification
+
+The repository includes a comprehensive automated test suite covering all critical components:
+
+```powershell
+# Run the entire test suite
+pytest -q
+
+# Run with test coverage reporting
+pytest --cov=app --cov-report=term-missing
 ```
 
----
-
-### Defense in Depth
-
-Security is implemented independently of the LLM.
-
-```text
-LLM Prompt
-    +
-Planner Rules
-    +
-SQLGlot AST Validation
-    +
-Function Allowlist
-    +
-Table Allowlist
-    +
-Limit Enforcement
-    =
-Safer AI-Assisted SQL Execution
-```
+### Test Scope
+- **SQL Security & AST**: Verifies that SQL injection attempts, unauthorized table names, data-modifying queries (DML/DDL), and forbidden functions are rejected.
+- **Grounding Validation**: Tests numeric extraction and ensures explanations containing numbers absent from query outputs are withheld.
+- **Catalog & Relationships**: Validates multi-dataset materialization, collision handling, and relationship overlap logic.
+- **Deterministic Offline Benchmark**: Runs fixed fixtures without network calls or API keys to verify parsing and safety rules:
+  ```powershell
+  python -c "from app.core.offline_benchmark import run_offline_benchmark; print(run_offline_benchmark())"
+  ```
 
 ---
 
-### Fail Safely
+## 📄 License
 
-Invalid or unsafe SQL is rejected instead of being executed.
-
----
-
-### Schema Awareness
-
-The AI receives information about the uploaded dataset and is instructed to use only columns that actually exist.
-
----
-
-### Read-Only Analytics
-
-The application is designed for analytical workloads and does not modify the underlying dataset.
-
----
-
-## 🔒 Data & Credential Safety
-
-The CSV is processed in the app host's memory with pandas and restricted
-DuckDB. It is not uploaded as a file to Gemini, but **data values do leave the
-host when you analyze**:
-
-- Planning sends your question, the execution profile (exact column names,
-  types, counts, numeric statistics and up to five sample rows with bounded
-  sample text), and
-  up to three previous successful questions and SQL statements.
-- Explanation sends the validated SQL, result metadata and up to 20 result
-  rows with bounded sample text. Values can contain personal or confidential information.
-- Follow-up context stays in the browser's server session until cleared or
-  lost, and is sent again with follow-up planning requests.
-
-Because dataset values are embedded directly in both prompts, a cell
-could in principle contain text written to look like an instruction to
-the model (a prompt-injection attempt). Both prompts explicitly instruct
-the model to treat all such values as data, never as instructions, but
-this is a prompt-level mitigation, not a code-enforced one — the model
-could still be misled into producing a misleading explanation. This does
-not affect SQL safety: the security validator and DuckDB execution
-boundary are independent of prompt content and are not weakened by it.
-
-Use synthetic or non-sensitive data for the demo. No automatic redaction
-or provider data-retention guarantee is implemented. Review the provider's
-[Gemini API data use documentation](https://ai.google.dev/gemini-api/terms) for your
-account before uploading sensitive material. Server logs may include SQL,
-filenames, normalized headers and execution diagnostics; protect log access.
-The adapter does not log API keys or raw provider response bodies.
-
-`.env`, `.streamlit/secrets.toml`, environments and local uploaded data are
-ignored by Git. The bundled fixture is deliberately synthetic. Never commit
-real credentials or uploaded datasets.
-
----
-
-## ⚠️ Current Limitations
-
-The current version is primarily designed for structured CSV-based analytical workflows.
-
-Current limitations include:
-
-- Primarily focused on CSV datasets
-- Query generation depends on LLM quality
-- Complex analytical questions may require additional validation or refinement
-- Dataset size is limited by the local execution environment
-- A shared password gate is available; individual accounts and tenant isolation are not implemented
-- UNION, INTERSECT and EXCEPT are intentionally unsupported
-- Monetary correction is conservative and English-only: ambiguous predicates, multiple monetary quantities and unknown terms are left unchanged
-- Follow-up context is session-only, limited to three successful turns, and
-  is not durable query history
-- The app is intended for controlled, trusted CSV uploads rather than
-  arbitrary public file-processing workloads
-
----
-
-## 🗺️ Future Roadmap
-
-Potential future improvements include:
-
-```text
-Current
-   │
-   ├── CSV Upload
-   ├── Dataset Profiling
-   ├── Natural-Language Questions
-   ├── AI SQL Generation
-   ├── SQL Security Validation
-   ├── DuckDB Execution
-   ├── Visualization
-   └── AI Explanation
-          │
-          ▼
-Future
-   │
-   ├── Durable Query History
-   ├── Multiple Dataset Support
-   ├── Advanced Visualizations
-   ├── Query History
-   ├── Result Caching
-   ├── Authentication
-   └── Production Monitoring
-```
-
----
-
-## 💡 Why This Project?
-
-This project demonstrates how generative AI can be integrated into a data-analysis workflow without giving the language model direct control over database execution.
-
-The architecture combines:
-
-- Generative AI
-- Natural-language processing
-- SQL generation
-- Data engineering
-- Data analysis
-- Application security
-- Automated testing
-- Cloud AI services
-
-The key architectural principle is the separation between **AI-generated SQL** and **SQL execution**.
-
-Instead of allowing the LLM to directly interact with the database:
-
-```text
-Natural Language
-      ↓
-     LLM
-      ↓
-Generated SQL
-      ↓
-Security Validation
-      ↓
-    DuckDB
-      ↓
-   Results
-```
-
-This provides an additional security boundary and makes the system easier to reason about, test, and extend.
-
----
-
-## 👨‍💻 Author
-
-**Sayantan Chaklader**
-
-AI/ML • Data Analytics • Python
-
-GitHub:  
-https://github.com/Dark-Frost009
-
----
-
-## 📌 Project Status
-
-The Gemini and multi-dataset changes are locally verified, but no current
-hosted deployment is claimed. On October 28, 2026, a fresh Python 3.13
-environment installed the pinned requirements cleanly; `pip check` passed and
-the full suite passed **480 tests** with **85.77% coverage**. The deterministic
-offline benchmark passed **50/50** cases. These checks do not make a Gemini API
-request or validate a hosted service. Live-provider and hosted-service
-verification must be recorded separately before a release or deployment is
-claimed.
-
-
-### Production operations
-
-AI requests are capped at 60 per hour per process (`MAX_LLM_REQUESTS_PER_HOUR`),
-including planning and explanation attempts. Provider quotas can be stricter.
-Failed provider calls are not retried automatically, and credential/access/quota
-failures have fixed user-facing messages. Logs include safe status, timings and
-reported token counts without private request contents. Production requires an
-access code. GitHub checks dependencies against OSV; existing Dependabot
-updates remain enabled. A separate workflow probes the hosted server every 30
-minutes without credentials or AI calls.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
