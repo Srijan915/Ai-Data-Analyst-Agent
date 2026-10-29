@@ -751,7 +751,12 @@ def _display_explore_dataset() -> None:
         tab_auto, tab_custom = st.tabs(["✨ Auto Insights", "🎨 Interactive Visualizer"])
 
         with tab_auto:
-            auto_charts = generate_dataset_auto_visualizations(dataframe, profile=profile, max_charts=4)
+            auto_charts = generate_dataset_auto_visualizations(
+                dataframe,
+                profile=profile,
+                max_charts=4,
+                agent=st.session_state.agent,
+            )
             if not auto_charts:
                 st.caption("Fewer than 2 rows or no visualizable columns found in the dataset.")
             else:
@@ -761,6 +766,8 @@ def _display_explore_dataset() -> None:
                         with st.container(border=True):
                             st.caption(f"**{chart_info['title']}**")
                             st.caption(chart_info["description"])
+                            if chart_info.get("sample_label"):
+                                st.caption(f"*{chart_info['sample_label']}*")
 
                             metrics = chart_info.get("metrics")
                             if metrics:

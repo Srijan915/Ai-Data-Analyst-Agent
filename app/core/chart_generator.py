@@ -1193,21 +1193,56 @@ def classify_dataset_columns(
     }
 
 
+def _query_readonly_duckdb(agent: Any, sql: str) -> Optional[pd.DataFrame]:
+    """Execute read-only SQL via the agent's existing DuckDB executor context."""
+    if agent is None:
+        return None
+    try:
+        from app.utils.security import validate_sql
+
+        if getattr(agent, "_dataset_catalog", None) is not None:
+            from app.core.dataset_catalog import CatalogSQLExecutor
+            context = CatalogSQLExecutor(agent._dataset_catalog, agent._max_result_rows)
+        elif getattr(agent, "_disk_dataset", None) is not None:
+            from app.core.disk_dataset import DiskSQLExecutor
+            context = DiskSQLExecutor(agent._disk_dataset, agent._max_result_rows)
+        elif getattr(agent, "_execution_dataframe", None) is not None:
+            from app.core.sql_executor import SQLExecutor
+            context = SQLExecutor(agent._execution_dataframe, max_result_rows=agent._max_result_rows)
+        else:
+            return None
+
+        with context as executor:
+            table_names = executor.table_names if hasattr(executor, "table_names") else [executor.table_name]
+            validation = validate_sql(sql, allowed_tables=table_names, max_rows=executor.max_result_rows)
+            if not validation.is_valid or not validation.cleaned_sql:
+                logger.warning("Insight SQL rejected by security: %s", [e.code for e in validation.errors])
+                return None
+            res = executor.execute(validation)
+            return res.dataframe
+    except Exception as exc:
+        logger.warning("Insight query failed: %s", exc)
+        return None
+
+
+def _get_agent_table_name(agent: Any) -> str:
+    """Get the primary table name for DuckDB queries."""
+    if agent is not None and getattr(agent, "_dataset_catalog", None) is not None:
+        names = getattr(agent._dataset_catalog, "table_names", None)
+        if names:
+            return names[0]
+    return "dataset"
+
+
 def generate_dataset_auto_visualizations(
     df: pd.DataFrame,
     profile: Optional[Any] = None,
     max_charts: int = 4,
+    agent: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     """
     Automatically identify suitable columns and generate meaningful visualizations.
-
-    Returns a list of dicts:
-        - "id": unique identifier
-        - "title": chart title
-        - "chart_type": type of visualization
-        - "figure": styled Plotly figure
-        - "description": concise analytical description
-        - "metrics": optional list of {"label": str, "value": str}
+    Queries the full dataset through DuckDB whenever possible.
     """
     if df is None or df.empty or len(df) < 2:
         return []
@@ -1217,26 +1252,56 @@ def generate_dataset_auto_visualizations(
     cat_cols = classified["categorical"]
     date_cols = classified["datetime"]
 
+    # Check whether df is a sample vs full dataset
+    tbl_name = _get_agent_table_name(agent)
+    profile_rows = getattr(profile, "row_count", None) or getattr(profile, "total_rows", None)
+    is_sample_fallback = bool(profile_rows and profile_rows > len(df))
+    sample_notice = f"Based on first {len(df):,} rows" if is_sample_fallback else None
+
     charts: List[Dict[str, Any]] = []
 
-    # 1. Categorical Breakdown (Donut if <= 7, else horizontal Bar chart)
+    # 1. Categorical Breakdown
     if cat_cols:
         primary_cat = cat_cols[0]
-        val_counts = df[primary_cat].value_counts().dropna()
-        if len(val_counts) >= 2:
-            if len(val_counts) <= 7:
-                labels = [str(k) for k in val_counts.index]
-                values = val_counts.values.tolist()
-                fig = px.pie(
-                    names=labels,
-                    values=values,
-                    hole=0.45,
-                )
-                fig.update_traces(
-                    textposition="inside",
-                    textinfo="percent+label",
-                    hovertemplate="<b>%{label}</b><br>Count: %{value:,}<br>Share: %{percent}<extra></extra>",
-                )
+        cat_df = None
+        tot_count = None
+
+        if agent is not None:
+            sql_cat = f'SELECT "{primary_cat}" AS cat, COUNT(*) AS count FROM "{tbl_name}" WHERE "{primary_cat}" IS NOT NULL GROUP BY "{primary_cat}" ORDER BY count DESC LIMIT 15'
+            cat_df = _query_readonly_duckdb(agent, sql_cat)
+            if cat_df is not None and not cat_df.empty:
+                sql_tot = f'SELECT COUNT(*) AS total_count FROM "{tbl_name}" WHERE "{primary_cat}" IS NOT NULL'
+                tot_res = _query_readonly_duckdb(agent, sql_tot)
+                tot_count = int(tot_res.iloc[0]["total_count"]) if tot_res is not None and not tot_res.empty else int(cat_df["count"].sum())
+
+        if cat_df is not None and len(cat_df) >= 2:
+            num_cats = len(cat_df)
+            if num_cats == 2:
+                # Replace 2-slice donut with sorted horizontal bar
+                pcts = [round(c / tot_count * 100, 1) if tot_count and tot_count > 0 else 0 for c in cat_df["count"]]
+                cat_df["pct"] = pcts
+                fig = px.bar(cat_df, x="count", y="cat", orientation="h")
+                fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed([str(v) for v in cat_df["cat"]]))))
+                fig.update_xaxes(rangemode="tozero")
+                fig.update_traces(marker_color="#0EA5E9", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
+                style_dark_figure(fig, title=f"Distribution: {primary_cat}", x_title="Count", y_title="")
+                charts.append({
+                    "id": f"bar_{primary_cat}",
+                    "title": f"Distribution: {primary_cat}",
+                    "chart_type": "bar",
+                    "figure": fig,
+                    "description": f"Breakdown across categories in {primary_cat}.",
+                    "metrics": [
+                        {"label": f"{cat_df.iloc[0]['cat']} Share", "value": f"{pcts[0]}%"},
+                        {"label": f"{cat_df.iloc[1]['cat']} Share", "value": f"{pcts[1]}%"},
+                        {"label": "Total Analyzed", "value": f"{tot_count:,}"},
+                    ],
+                })
+            elif num_cats <= 7:
+                labels = [str(k) for k in cat_df["cat"]]
+                values = cat_df["count"].tolist()
+                fig = px.pie(names=labels, values=values, hole=0.45)
+                fig.update_traces(textposition="inside", textinfo="percent+label", hovertemplate="<b>%{label}</b><br>Count: %{value:,}<br>Share: %{percent}<extra></extra>")
                 style_dark_figure(fig, title=f"Proportion by {primary_cat}")
                 charts.append({
                     "id": f"donut_{primary_cat}",
@@ -1245,29 +1310,16 @@ def generate_dataset_auto_visualizations(
                     "figure": fig,
                     "description": f"Composition across top {len(labels)} categories.",
                     "metrics": [
-                        {"label": "Categories", "value": f"{len(val_counts):,}"},
+                        {"label": "Categories", "value": f"{num_cats:,}"},
                         {"label": "Top Category", "value": f"{labels[0]} ({values[0]:,})"},
                     ],
                 })
             else:
-                top_10 = val_counts.head(10).reset_index()
-                top_10.columns = [primary_cat, "count"]
-                fig = px.bar(
-                    top_10,
-                    x="count",
-                    y=primary_cat,
-                    orientation="h",
-                )
-                fig.update_layout(
-                    yaxis=dict(
-                        categoryorder="array",
-                        categoryarray=list(reversed([str(v) for v in top_10[primary_cat]])),
-                    ),
-                )
-                fig.update_traces(
-                    marker_color="#0EA5E9",
-                    hovertemplate=f"<b>%{{y}}</b><br>Count: %{{x:,}}<extra></extra>",
-                )
+                top_10 = cat_df.head(10)
+                fig = px.bar(top_10, x="count", y="cat", orientation="h")
+                fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed([str(v) for v in top_10["cat"]]))))
+                fig.update_xaxes(rangemode="tozero")
+                fig.update_traces(marker_color="#0EA5E9", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
                 style_dark_figure(fig, title=f"Top {primary_cat} by Count", x_title="Count", y_title="")
                 charts.append({
                     "id": f"bar_{primary_cat}",
@@ -1276,144 +1328,263 @@ def generate_dataset_auto_visualizations(
                     "figure": fig,
                     "description": f"Frequency ranking of top {len(top_10)} categories.",
                     "metrics": [
-                        {"label": "Total Unique", "value": f"{len(val_counts):,}"},
-                        {"label": "Top Leader", "value": f"{top_10.iloc[0][primary_cat]}"},
+                        {"label": "Top Leader", "value": f"{top_10.iloc[0]['cat']}"},
+                        {"label": "Total Analyzed", "value": f"{tot_count:,}"},
                     ],
                 })
-
-    # 2. Date/Time Trend (Line chart for trends over time)
-    if date_cols and len(charts) < max_charts:
-        date_col = date_cols[0]
-        safe_df = df.dropna(subset=[date_col]).copy()
-        try:
-            safe_df["_parsed_date"] = pd.to_datetime(safe_df[date_col], errors="coerce")
-            safe_df = safe_df.dropna(subset=["_parsed_date"])
-            if len(safe_df) >= 2:
-                if num_cols:
-                    metric_col = num_cols[0]
-                    trend_df = safe_df.groupby(safe_df["_parsed_date"].dt.date)[metric_col].agg(["sum", "count"]).reset_index()
-                    trend_df.columns = ["date", "val", "count"]
-                    trend_df = trend_df.sort_values("date")
-                    metric_label = f"Total {metric_col}"
-                else:
-                    trend_df = safe_df.groupby(safe_df["_parsed_date"].dt.date).size().reset_index()
-                    trend_df.columns = ["date", "val"]
-                    trend_df = trend_df.sort_values("date")
-                    metric_label = "Record Count"
-
-                if len(trend_df) >= 2:
-                    fig = px.line(
-                        trend_df,
-                        x="date",
-                        y="val",
-                        markers=len(trend_df) <= 60,
-                    )
-                    fig.update_traces(
-                        line=dict(width=2.5, color="#06B6D4"),
-                        hovertemplate="<b>Date: %{x}</b><br>Value: %{y:,.2f}<extra></extra>",
-                    )
-                    style_dark_figure(
-                        fig,
-                        title=f"{metric_label} Trend ({date_col})",
-                        x_title="Date",
-                        y_title=metric_label,
-                    )
+        else:
+            # Fallback to pandas
+            val_counts = df[primary_cat].value_counts().dropna()
+            if len(val_counts) >= 2:
+                num_cats = len(val_counts)
+                total_sample_c = int(val_counts.sum())
+                desc_suffix = f" ({sample_notice})" if sample_notice else ""
+                if num_cats == 2:
+                    labels = [str(k) for k in val_counts.index]
+                    pcts = [round(v / total_sample_c * 100, 1) for v in val_counts.values]
+                    two_df = pd.DataFrame({primary_cat: labels, "count": val_counts.values})
+                    fig = px.bar(two_df, x="count", y=primary_cat, orientation="h")
+                    fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed(labels))))
+                    fig.update_xaxes(rangemode="tozero")
+                    fig.update_traces(marker_color="#0EA5E9", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
+                    style_dark_figure(fig, title=f"Distribution: {primary_cat}", x_title="Count", y_title="")
                     charts.append({
-                        "id": f"trend_{date_col}",
-                        "title": f"Timeline Trend ({date_col})",
-                        "chart_type": "line",
+                        "id": f"bar_{primary_cat}",
+                        "title": f"Distribution: {primary_cat}",
+                        "chart_type": "bar",
                         "figure": fig,
-                        "description": f"Chronological trend across time periods.",
+                        "description": f"Breakdown across {primary_cat}{desc_suffix}.",
+                        "sample_label": sample_notice,
                         "metrics": [
-                            {"label": "Periods", "value": f"{len(trend_df):,}"},
-                            {"label": "Peak Value", "value": f"{trend_df['val'].max():,.2f}" if trend_df['val'].max() > 10 else f"{trend_df['val'].max():,}"},
+                            {"label": f"{labels[0]} Share", "value": f"{pcts[0]}%"},
+                            {"label": f"{labels[1]} Share", "value": f"{pcts[1]}%"},
+                            {"label": "Sample Rows" if sample_notice else "Total Count", "value": f"{total_sample_c:,}"},
                         ],
                     })
-        except Exception as exc:
-            logger.debug("Failed auto-generating datetime line chart: %s", exc)
+                elif num_cats <= 7:
+                    labels = [str(k) for k in val_counts.index]
+                    values = val_counts.values.tolist()
+                    fig = px.pie(names=labels, values=values, hole=0.45)
+                    fig.update_traces(textposition="inside", textinfo="percent+label", hovertemplate="<b>%{label}</b><br>Count: %{value:,}<br>Share: %{percent}<extra></extra>")
+                    style_dark_figure(fig, title=f"Proportion by {primary_cat}")
+                    charts.append({
+                        "id": f"donut_{primary_cat}",
+                        "title": f"Proportion by {primary_cat}",
+                        "chart_type": "donut",
+                        "figure": fig,
+                        "description": f"Composition across top {len(labels)} categories{desc_suffix}.",
+                        "sample_label": sample_notice,
+                        "metrics": [
+                            {"label": "Categories", "value": f"{len(val_counts):,}"},
+                            {"label": "Top Category", "value": f"{labels[0]} ({values[0]:,})"},
+                        ],
+                    })
+                else:
+                    top_10 = val_counts.head(10).reset_index()
+                    top_10.columns = [primary_cat, "count"]
+                    fig = px.bar(top_10, x="count", y=primary_cat, orientation="h")
+                    fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed([str(v) for v in top_10[primary_cat]]))))
+                    fig.update_xaxes(rangemode="tozero")
+                    fig.update_traces(marker_color="#0EA5E9", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
+                    style_dark_figure(fig, title=f"Top {primary_cat} by Count", x_title="Count", y_title="")
+                    charts.append({
+                        "id": f"bar_{primary_cat}",
+                        "title": f"Top Categories: {primary_cat}",
+                        "chart_type": "bar",
+                        "figure": fig,
+                        "description": f"Frequency ranking of top {len(top_10)} categories{desc_suffix}.",
+                        "sample_label": sample_notice,
+                        "metrics": [
+                            {"label": "Top Leader", "value": f"{top_10.iloc[0][primary_cat]}"},
+                            {"label": "Sample Rows" if sample_notice else "Total Unique", "value": f"{total_sample_c:,}"},
+                        ],
+                    })
 
-    # 3. Numeric Column Distribution, Histogram, and Summary Metrics
+    # 2. Date/Time Trend (Aggregated by week or month)
+    if date_cols and len(charts) < max_charts:
+        date_col = date_cols[0]
+        trend_df = None
+        trunc_name = "Monthly"
+
+        if agent is not None:
+            sql_bounds = f'SELECT MIN("{date_col}") AS min_d, MAX("{date_col}") AS max_d FROM "{tbl_name}" WHERE "{date_col}" IS NOT NULL'
+            bounds_res = _query_readonly_duckdb(agent, sql_bounds)
+            if bounds_res is not None and not bounds_res.empty and pd.notna(bounds_res.iloc[0]["min_d"]) and pd.notna(bounds_res.iloc[0]["max_d"]):
+                d_min = pd.to_datetime(bounds_res.iloc[0]["min_d"])
+                d_max = pd.to_datetime(bounds_res.iloc[0]["max_d"])
+                days_span = (d_max - d_min).days
+                trunc_unit = "month" if days_span > 90 else "week"
+                trunc_name = "Monthly" if trunc_unit == "month" else "Weekly"
+
+                if num_cols:
+                    metric_col = num_cols[0]
+                    sql_trend = f'SELECT CAST(DATE_TRUNC(\'{trunc_unit}\', "{date_col}") AS DATE) AS period, SUM("{metric_col}") AS val, COUNT(*) AS count FROM "{tbl_name}" WHERE "{date_col}" IS NOT NULL GROUP BY period ORDER BY period LIMIT 500'
+                    metric_label = f"Total {metric_col}"
+                else:
+                    sql_trend = f'SELECT CAST(DATE_TRUNC(\'{trunc_unit}\', "{date_col}") AS DATE) AS period, COUNT(*) AS val FROM "{tbl_name}" WHERE "{date_col}" IS NOT NULL GROUP BY period ORDER BY period LIMIT 500'
+                    metric_label = "Record Count"
+
+                trend_df = _query_readonly_duckdb(agent, sql_trend)
+
+        if trend_df is not None and len(trend_df) >= 2:
+            trend_df = trend_df.dropna(subset=["period", "val"]).sort_values("period")
+            fig = px.line(trend_df, x="period", y="val", markers=len(trend_df) <= 60)
+            fig.update_traces(line=dict(width=2.5, color="#06B6D4"), hovertemplate="<b>Date: %{x}</b><br>Value: %{y:,.2f}<extra></extra>")
+            fig.update_yaxes(autorange=True, rangemode="normal")
+            style_dark_figure(fig, title=f"{trunc_name} {metric_label} Trend ({date_col})", x_title="Date", y_title=metric_label)
+            charts.append({
+                "id": f"trend_{date_col}",
+                "title": f"{trunc_name} Trend ({date_col})",
+                "chart_type": "line",
+                "figure": fig,
+                "description": f"Chronological {trunc_name.lower()} trend across the full dataset.",
+                "metrics": [
+                    {"label": f"{trunc_name} Periods", "value": f"{len(trend_df):,}"},
+                    {"label": "Peak Value", "value": f"{trend_df['val'].max():,.2f}" if trend_df['val'].max() > 10 else f"{trend_df['val'].max():,}"},
+                ],
+            })
+        else:
+            # Fallback to pandas
+            safe_df = df.dropna(subset=[date_col]).copy()
+            try:
+                safe_df["_parsed_date"] = pd.to_datetime(safe_df[date_col], errors="coerce")
+                safe_df = safe_df.dropna(subset=["_parsed_date"])
+                if len(safe_df) >= 2:
+                    d_min = safe_df["_parsed_date"].min()
+                    d_max = safe_df["_parsed_date"].max()
+                    freq = "M" if (d_max - d_min).days > 90 else "W"
+                    trunc_name = "Monthly" if freq == "M" else "Weekly"
+                    safe_df["_period"] = safe_df["_parsed_date"].dt.to_period(freq).dt.to_timestamp()
+                    if num_cols:
+                        metric_col = num_cols[0]
+                        trend_df = safe_df.groupby("_period")[metric_col].agg("sum").reset_index()
+                        trend_df.columns = ["date", "val"]
+                        trend_df = trend_df.sort_values("date")
+                        metric_label = f"Total {metric_col}"
+                    else:
+                        trend_df = safe_df.groupby("_period").size().reset_index(name="val")
+                        trend_df.columns = ["date", "val"]
+                        trend_df = trend_df.sort_values("date")
+                        metric_label = "Record Count"
+
+                    if len(trend_df) >= 2:
+                        fig = px.line(trend_df, x="date", y="val", markers=len(trend_df) <= 60)
+                        fig.update_traces(line=dict(width=2.5, color="#06B6D4"), hovertemplate="<b>Date: %{x}</b><br>Value: %{y:,.2f}<extra></extra>")
+                        fig.update_yaxes(autorange=True, rangemode="normal")
+                        style_dark_figure(fig, title=f"{trunc_name} {metric_label} Trend ({date_col})", x_title="Date", y_title=metric_label)
+                        desc_suffix = f" ({sample_notice})" if sample_notice else ""
+                        charts.append({
+                            "id": f"trend_{date_col}",
+                            "title": f"{trunc_name} Trend ({date_col})",
+                            "chart_type": "line",
+                            "figure": fig,
+                            "description": f"Chronological {trunc_name.lower()} trend{desc_suffix}.",
+                            "sample_label": sample_notice,
+                            "metrics": [
+                                {"label": f"{trunc_name} Periods", "value": f"{len(trend_df):,}"},
+                                {"label": "Peak Value", "value": f"{trend_df['val'].max():,.2f}" if trend_df['val'].max() > 10 else f"{trend_df['val'].max():,}"},
+                            ],
+                        })
+            except Exception as exc:
+                logger.debug("Failed auto-generating datetime line chart: %s", exc)
+
+    # 3. Numeric Column Distribution & Summary Metrics
     if num_cols and len(charts) < max_charts:
         primary_num = num_cols[0]
+        summ_df = None
+        if agent is not None:
+            sql_summ = f'SELECT COUNT(*) AS total_n, AVG("{primary_num}") AS avg_v, MIN("{primary_num}") AS min_v, MAX("{primary_num}") AS max_v FROM "{tbl_name}" WHERE "{primary_num}" IS NOT NULL'
+            summ_df = _query_readonly_duckdb(agent, sql_summ)
+
         num_series = df[primary_num].dropna()
         if len(num_series) >= 2 and num_series.nunique() > 1:
-            mean_v = float(num_series.mean())
-            median_v = float(num_series.median())
-            std_v = float(num_series.std()) if len(num_series) > 1 else 0.0
-            min_v = float(num_series.min())
-            max_v = float(num_series.max())
+            if summ_df is not None and not summ_df.empty:
+                mean_v = float(summ_df.iloc[0]["avg_v"]) if pd.notna(summ_df.iloc[0]["avg_v"]) else float(num_series.mean())
+                min_v = float(summ_df.iloc[0]["min_v"]) if pd.notna(summ_df.iloc[0]["min_v"]) else float(num_series.min())
+                max_v = float(summ_df.iloc[0]["max_v"]) if pd.notna(summ_df.iloc[0]["max_v"]) else float(num_series.max())
+                total_n = int(summ_df.iloc[0]["total_n"]) if pd.notna(summ_df.iloc[0]["total_n"]) else len(num_series)
+                metrics_list = [
+                    {"label": "Mean (Full Dataset)", "value": f"{mean_v:,.2f}" if abs(mean_v) < 1e6 else f"{mean_v:,.0f}"},
+                    {"label": "Min - Max", "value": f"{min_v:,.1f} to {max_v:,.1f}"},
+                    {"label": "Total Analyzed", "value": f"{total_n:,}"},
+                ]
+                sample_lbl = None
+            else:
+                mean_v = float(num_series.mean())
+                median_v = float(num_series.median())
+                min_v = float(num_series.min())
+                max_v = float(num_series.max())
+                metrics_list = [
+                    {"label": "Mean", "value": f"{mean_v:,.2f}" if abs(mean_v) < 1e6 else f"{mean_v:,.0f}"},
+                    {"label": "Median", "value": f"{median_v:,.2f}" if abs(median_v) < 1e6 else f"{median_v:,.0f}"},
+                    {"label": "Min - Max", "value": f"{min_v:,.1f} to {max_v:,.1f}"},
+                ]
+                sample_lbl = sample_notice
 
             hist_df = pd.DataFrame({primary_num: num_series})
-            if len(hist_df) > 5000:
-                hist_sample = hist_df.sample(5000, random_state=42)
-            else:
-                hist_sample = hist_df
+            hist_sample = hist_df.sample(5000, random_state=42) if len(hist_df) > 5000 else hist_df
 
-            fig = px.histogram(
-                hist_sample,
-                x=primary_num,
-                nbins=25,
-                marginal="box",
-            )
-            fig.update_traces(
-                marker_color="#06B6D4",
-                marker_line_color="#0EA5E9",
-                marker_line_width=1,
-                opacity=0.85,
-                hovertemplate=f"Range: %{{x}}<br>Count: %{{y:,}}<extra></extra>",
-            )
-            style_dark_figure(
-                fig,
-                title=f"Distribution: {primary_num}",
-                x_title=primary_num,
-                y_title="Frequency",
-            )
+            fig = px.histogram(hist_sample, x=primary_num, nbins=25, marginal="box")
+            fig.update_traces(marker_color="#06B6D4", marker_line_color="#0EA5E9", marker_line_width=1, opacity=0.85, hovertemplate=f"Range: %{{x}}<br>Count: %{{y:,}}<extra></extra>")
+            fig.update_yaxes(rangemode="tozero")
+            style_dark_figure(fig, title=f"Distribution: {primary_num}", x_title=primary_num, y_title="Frequency")
             charts.append({
                 "id": f"hist_{primary_num}",
                 "title": f"Distribution: {primary_num}",
                 "chart_type": "histogram",
                 "figure": fig,
-                "description": f"Histogram and spread box plot showing variance and central tendency.",
-                "metrics": [
-                    {"label": "Mean", "value": f"{mean_v:,.2f}" if abs(mean_v) < 1e6 else f"{mean_v:,.0f}"},
-                    {"label": "Median", "value": f"{median_v:,.2f}" if abs(median_v) < 1e6 else f"{median_v:,.0f}"},
-                    {"label": "Min - Max", "value": f"{min_v:,.1f} to {max_v:,.1f}"},
-                    {"label": "Std Dev", "value": f"{std_v:,.2f}"},
-                ],
+                "description": f"Histogram and spread box plot showing distribution variance.",
+                "sample_label": sample_lbl,
+                "metrics": metrics_list,
             })
 
     # 4. Category + Numeric Value: Aggregated Bar Chart
     if cat_cols and num_cols and len(charts) < max_charts:
         agg_cat = cat_cols[1] if len(cat_cols) > 1 else cat_cols[0]
         agg_num = num_cols[0]
-        grouped = df.groupby(agg_cat)[agg_num].mean().dropna().sort_values(ascending=False).head(10).reset_index()
-        if len(grouped) >= 2:
-            fig = px.bar(
-                grouped,
-                x=agg_cat,
-                y=agg_num,
-            )
-            fig.update_traces(
-                marker_color="#10B981",
-                hovertemplate=f"<b>%{{x}}</b><br>Average {agg_num}: %{{y:,.2f}}<extra></extra>",
-            )
-            style_dark_figure(
-                fig,
-                title=f"Avg {agg_num} by {agg_cat}",
-                x_title=agg_cat,
-                y_title=f"Average {agg_num}",
-            )
+        grp_df = None
+
+        if agent is not None:
+            sql_grp = f'SELECT "{agg_cat}" AS cat, AVG("{agg_num}") AS avg_v, COUNT(*) AS count FROM "{tbl_name}" WHERE "{agg_cat}" IS NOT NULL AND "{agg_num}" IS NOT NULL GROUP BY "{agg_cat}" ORDER BY avg_v DESC LIMIT 10'
+            grp_df = _query_readonly_duckdb(agent, sql_grp)
+
+        if grp_df is not None and len(grp_df) >= 2:
+            fig = px.bar(grp_df, x="cat", y="avg_v")
+            fig.update_yaxes(rangemode="tozero")
+            fig.update_traces(marker_color="#10B981", hovertemplate=f"<b>%{{x}}</b><br>Average {agg_num}: %{{y:,.2f}}<extra></extra>")
+            style_dark_figure(fig, title=f"Avg {agg_num} by {agg_cat}", x_title=agg_cat, y_title=f"Average {agg_num}")
             charts.append({
                 "id": f"agg_bar_{agg_cat}_{agg_num}",
                 "title": f"Average {agg_num} by {agg_cat}",
                 "chart_type": "bar",
                 "figure": fig,
-                "description": f"Aggregated metric comparison across categories.",
+                "description": f"Aggregated metric comparison across categories on full dataset.",
                 "metrics": [
-                    {"label": "Top Category", "value": str(grouped.iloc[0][agg_cat])},
-                    {"label": "Highest Avg", "value": f"{grouped.iloc[0][agg_num]:,.2f}"},
+                    {"label": "Top Category", "value": str(grp_df.iloc[0]["cat"])},
+                    {"label": "Highest Avg", "value": f"{grp_df.iloc[0]['avg_v']:,.2f}"},
                 ],
             })
+        else:
+            # Fallback to pandas
+            grouped = df.groupby(agg_cat)[agg_num].mean().dropna().sort_values(ascending=False).head(10).reset_index()
+            if len(grouped) >= 2:
+                fig = px.bar(grouped, x=agg_cat, y=agg_num)
+                fig.update_yaxes(rangemode="tozero")
+                fig.update_traces(marker_color="#10B981", hovertemplate=f"<b>%{{x}}</b><br>Average {agg_num}: %{{y:,.2f}}<extra></extra>")
+                style_dark_figure(fig, title=f"Avg {agg_num} by {agg_cat}", x_title=agg_cat, y_title=f"Average {agg_num}")
+                desc_suffix = f" ({sample_notice})" if sample_notice else ""
+                charts.append({
+                    "id": f"agg_bar_{agg_cat}_{agg_num}",
+                    "title": f"Average {agg_num} by {agg_cat}",
+                    "chart_type": "bar",
+                    "figure": fig,
+                    "description": f"Aggregated metric comparison across categories{desc_suffix}.",
+                    "sample_label": sample_notice,
+                    "metrics": [
+                        {"label": "Top Category", "value": str(grouped.iloc[0][agg_cat])},
+                        {"label": "Highest Avg", "value": f"{grouped.iloc[0][agg_num]:,.2f}"},
+                    ],
+                })
 
     # 5. Two Numeric Columns: Scatter Plot (Correlation)
     if len(num_cols) >= 2 and len(charts) < max_charts:
@@ -1421,41 +1592,27 @@ def generate_dataset_auto_visualizations(
         y_num = num_cols[1]
         pair_df = df[[x_num, y_num]].dropna()
         if len(pair_df) >= 5 and pair_df[x_num].nunique() > 1 and pair_df[y_num].nunique() > 1:
-            if len(pair_df) > 1000:
-                pair_sample = pair_df.sample(1000, random_state=42)
-            else:
-                pair_sample = pair_df
-
+            pair_sample = pair_df.sample(1000, random_state=42) if len(pair_df) > 1000 else pair_df
             corr_val = pair_df[x_num].corr(pair_df[y_num])
             corr_str = f"{corr_val:.2f}" if pd.notna(corr_val) else "N/A"
 
-            fig = px.scatter(
-                pair_sample,
-                x=x_num,
-                y=y_num,
-                opacity=0.75,
-            )
-            fig.update_traces(
-                marker=dict(size=7, color="#6366F1", line=dict(width=1, color="#A5B4FC")),
-                hovertemplate=f"<b>{x_num}:</b> %{{x:,.2f}}<br><b>{y_num}:</b> %{{y:,.2f}}<extra></extra>",
-            )
-            style_dark_figure(
-                fig,
-                title=f"{x_num} vs {y_num}",
-                x_title=x_num,
-                y_title=y_num,
-            )
+            fig = px.scatter(pair_sample, x=x_num, y=y_num, opacity=0.75)
+            fig.update_traces(marker=dict(size=7, color="#6366F1", line=dict(width=1, color="#A5B4FC")), hovertemplate=f"<b>{x_num}:</b> %{{x:,.2f}}<br><b>{y_num}:</b> %{{y:,.2f}}<extra></extra>")
+            style_dark_figure(fig, title=f"{x_num} vs {y_num}", x_title=x_num, y_title=y_num)
             charts.append({
                 "id": f"scatter_{x_num}_{y_num}",
                 "title": f"Correlation: {x_num} vs {y_num}",
                 "chart_type": "scatter",
                 "figure": fig,
                 "description": f"Scatter correlation between {x_num} and {y_num} (Pearson r = {corr_str}).",
+                "sample_label": sample_notice,
                 "metrics": [
                     {"label": "Correlation (r)", "value": corr_str},
                     {"label": "Points Plotted", "value": f"{len(pair_sample):,}"},
                 ],
             })
+
+    return charts[:max_charts]
 
     return charts[:max_charts]
 
