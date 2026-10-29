@@ -11,7 +11,7 @@
 
 Watch the AI Data Analyst Agent analyze datasets, generate insights, and create interactive visualizations.
 
-![AI Data Analyst Agent Demo](screenshots/demo.gif)
+![AI Data Analyst Agent Demo](https://raw.githubusercontent.com/Srijan915/Ai-Data-Analyst-Agent/main/screenshots/demo.gif)
 
 
 
