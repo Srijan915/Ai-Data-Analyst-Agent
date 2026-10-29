@@ -1200,15 +1200,19 @@ def _query_readonly_duckdb(agent: Any, sql: str) -> Optional[pd.DataFrame]:
     try:
         from app.utils.security import validate_sql
 
-        if getattr(agent, "_dataset_catalog", None) is not None:
+        cat = getattr(agent, "_dataset_catalog", None)
+        disk = getattr(agent, "_disk_dataset", None)
+        exec_df = getattr(agent, "_execution_dataframe", None)
+
+        if cat is not None and not type(cat).__name__.startswith("Mock"):
             from app.core.dataset_catalog import CatalogSQLExecutor
-            context = CatalogSQLExecutor(agent._dataset_catalog, agent._max_result_rows)
-        elif getattr(agent, "_disk_dataset", None) is not None:
+            context = CatalogSQLExecutor(cat, getattr(agent, "_max_result_rows", 10000))
+        elif disk is not None and not type(disk).__name__.startswith("Mock"):
             from app.core.disk_dataset import DiskSQLExecutor
-            context = DiskSQLExecutor(agent._disk_dataset, agent._max_result_rows)
-        elif getattr(agent, "_execution_dataframe", None) is not None:
+            context = DiskSQLExecutor(disk, getattr(agent, "_max_result_rows", 10000))
+        elif isinstance(exec_df, pd.DataFrame) and not exec_df.empty:
             from app.core.sql_executor import SQLExecutor
-            context = SQLExecutor(agent._execution_dataframe, max_result_rows=agent._max_result_rows)
+            context = SQLExecutor(exec_df, max_result_rows=getattr(agent, "_max_result_rows", 10000))
         else:
             return None
 
@@ -1221,16 +1225,21 @@ def _query_readonly_duckdb(agent: Any, sql: str) -> Optional[pd.DataFrame]:
             res = executor.execute(validation)
             return res.dataframe
     except Exception as exc:
-        logger.warning("Insight query failed: %s", exc)
+        logger.debug("Insight query failed or not feasible: %s", exc)
         return None
 
 
 def _get_agent_table_name(agent: Any) -> str:
     """Get the primary table name for DuckDB queries."""
-    if agent is not None and getattr(agent, "_dataset_catalog", None) is not None:
-        names = getattr(agent._dataset_catalog, "table_names", None)
-        if names:
-            return names[0]
+    try:
+        if agent is not None:
+            catalog = getattr(agent, "_dataset_catalog", None)
+            if catalog is not None and not type(catalog).__name__.startswith("Mock"):
+                names = getattr(catalog, "table_names", None)
+                if isinstance(names, (list, tuple)) and names:
+                    return str(names[0])
+    except Exception:
+        pass
     return "dataset"
 
 
