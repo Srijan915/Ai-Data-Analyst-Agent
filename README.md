@@ -11,12 +11,7 @@
 
 Watch the AI Data Analyst Agent analyze datasets, generate insights, and create interactive visualizations.
 
-![AI Data Analyst Agent Demo](https://raw.githubusercontent.com/Srijan915/Ai-Data-Analyst-Agent/main/screenshots/demo.gif)
-
-
-
-
-
+![AI Data Analyst Agent Demo](screenshots/demo.gif)
 
 An enterprise-ready, autonomous AI Data Analyst Agent built with **Google Gemini**, **DuckDB**, **SQLGlot**, and **Streamlit**. The system converts plain-English analytical questions into optimized DuckDB SQL, verifies queries against an Abstract Syntax Tree (AST) security layer, executes them in a sandboxed SQL engine, validates narrative numbers against actual execution outputs, and renders interactive dark-themed charts and data tables.
 
@@ -185,7 +180,7 @@ ai-data-analyst-agent/
 
 ---
 
-## ## 📷 Application Screenshots
+## 📷 Application Screenshots
 
 The following screenshots showcase the current AI Data Analyst Agent dashboard and its analytics workflow.
 
@@ -206,12 +201,6 @@ Explore automatically generated charts and dataset-level insights.
 Ask analytical questions in plain English and inspect the resulting insights and verified output.
 
 ![Natural Language Query and Analysis](screenshots/query-analysis.png)
-
-### 4. Interactive Chart Exploration
-
-Explore dataset trends and distributions using interactive visualizations.
-
-![Interactive Chart Exploration](screenshots/chart-details.png)
 
 
 ---
