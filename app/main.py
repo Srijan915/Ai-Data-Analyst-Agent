@@ -52,6 +52,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # Third-party imports
 # --------------------------------------------------------------------------
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -944,7 +945,7 @@ def _display_chart(chart_spec, query_result=None) -> None:
                 raw_val = df.iloc[0, 0]
                 if pd.isna(raw_val):
                     display_val = "N/A"
-                elif isinstance(raw_val, float):
+                elif isinstance(raw_val, (float, np.floating)):
                     display_val = f"{raw_val:,.2f}"
                 elif isinstance(raw_val, (int, np.integer)):
                     display_val = f"{raw_val:,}"
@@ -962,7 +963,7 @@ def _display_chart(chart_spec, query_result=None) -> None:
                     raw_val = df.iloc[0, idx]
                     if pd.isna(raw_val):
                         display_val = "N/A"
-                    elif isinstance(raw_val, float):
+                    elif isinstance(raw_val, (float, np.floating)):
                         display_val = f"{raw_val:,.2f}"
                     elif isinstance(raw_val, (int, np.integer)):
                         display_val = f"{raw_val:,}"
@@ -989,7 +990,7 @@ def _display_chart(chart_spec, query_result=None) -> None:
             label = item.get("category") or item.get("x") or item.get("label") or "Result"
             val = item.get("value") or item.get("y") or item.get("val")
             if val is not None:
-                display_val = f"{val:,.2f}" if isinstance(val, float) else (f"{val:,}" if isinstance(val, (int, np.integer)) else str(val))
+                display_val = f"{val:,.2f}" if isinstance(val, (float, np.floating)) else (f"{val:,}" if isinstance(val, (int, np.integer)) else str(val))
                 st.caption("Single record result:")
                 st.metric(label=str(label).replace("_", " ").title(), value=display_val)
                 return

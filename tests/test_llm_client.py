@@ -2,6 +2,7 @@
 """Gemini adapter contract tests use an offline SDK mock."""
 from types import SimpleNamespace
 from unittest.mock import Mock
+import ssl
 
 import httpx
 import pytest
@@ -22,6 +23,7 @@ def transport(monkeypatch):
             options = kwargs["http_options"]
             assert options.timeout == 50000
             assert options.retry_options.attempts == 1
+            assert "verify" in options.client_args
             self.models = SimpleNamespace(generate_content=self.generate_content)
 
         def __enter__(self):
@@ -79,8 +81,8 @@ def test_request_and_response_contract(transport):
         (401, llm.LLMCredentialsError),
         (403, llm.LLMAccessDeniedError),
         (429, llm.LLMThrottlingError),
-        (400, llm.LLMAPIError),
-        (404, llm.LLMAPIError),
+        (400, llm.LLMConfigurationError),
+        (404, llm.LLMConfigurationError),
         (500, llm.LLMAPIError),
     ],
 )
@@ -103,10 +105,41 @@ def test_timeout_without_retry(transport):
     calls, responses = transport
     responses.append(httpx.ReadTimeout("private details"))
 
-    with pytest.raises(llm.LLMAPIError, match="provider request failed"):
+    with pytest.raises(llm.LLMTimeoutError, match="timed out"):
         llm.GeminiClient().generate_text("question")
 
     assert len(calls) == 1
+
+
+def test_tls_verification_failure_is_distinguished_and_sanitized(transport, caplog):
+    """Corporate/TLS interception failures must not look like bad API keys."""
+
+    certificate_error = ssl.SSLCertVerificationError(
+        1, "certificate verify failed: private-certificate-details"
+    )
+    connection_error = httpx.ConnectError("private-network-details")
+    connection_error.__cause__ = certificate_error
+    transport[1].append(connection_error)
+
+    with pytest.raises(llm.LLMTLSVerificationError) as error:
+        llm.GeminiClient().generate_text("question")
+
+    assert "private" not in str(error.value)
+    assert "private-certificate-details" not in caplog.text
+    assert "private-network-details" not in caplog.text
+
+
+def test_network_failure_is_distinguished_from_model_configuration(transport):
+    transport[1].append(httpx.ConnectError("connection failed"))
+
+    with pytest.raises(llm.LLMNetworkError):
+        llm.GeminiClient().generate_text("question")
+
+
+def test_explicit_ca_bundle_preserves_httpx_environment_support(monkeypatch):
+    monkeypatch.setenv("SSL_CERT_FILE", "C:/private/corporate-ca.pem")
+
+    assert llm._secure_http_client_args() == {}
 
 
 @pytest.mark.parametrize(

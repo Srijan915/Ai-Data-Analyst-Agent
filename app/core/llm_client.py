@@ -5,11 +5,13 @@ Client creation is lazy: startup and uploads do not require credentials.
 Provider response bodies and keys are never included in application errors.
 """
 import os
+import ssl
 from time import perf_counter
 from functools import lru_cache
 from typing import Optional, Protocol
 
 import httpx
+import truststore
 from google import genai
 from google.genai import errors, types
 
@@ -37,11 +39,53 @@ def _finish_reason_name(value: object) -> str | None:
 
 
 def _log_provider_failure(exc):
+    """Log only stable, non-sensitive provider diagnostics."""
+
+    status_code = getattr(exc, "code", None)
+    if status_code is None:
+        status_code = getattr(exc, "status_code", None)
+    provider_status = getattr(exc, "status", None)
+    if not isinstance(provider_status, str):
+        provider_status = None
+    elif not provider_status.replace("_", "").replace("-", "").isalnum():
+        provider_status = None
+
     logger.warning(
-        "AI request failed | error_type=%s | http_status=%s",
+        "AI request failed | error_type=%s | http_status=%s | provider_status=%s",
         type(exc).__name__,
-        getattr(exc, "status_code", None),
+        status_code,
+        provider_status,
     )
+
+
+def _has_cause(exc: BaseException, error_type: type[BaseException]) -> bool:
+    """Check an exception chain without logging its potentially sensitive text."""
+
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, error_type):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _secure_http_client_args() -> dict:
+    """Use platform roots unless an explicit CA bundle was configured.
+
+    HTTPX defaults to certifi, which does not include enterprise roots that
+    are trusted by Windows. ``truststore`` uses the native platform store and
+    still performs normal hostname and certificate validation. If deployment
+    configuration supplies an explicit CA bundle/directory, preserve HTTPX's
+    standard environment-variable behavior instead.
+    """
+
+    if os.getenv("SSL_CERT_FILE") or os.getenv("SSL_CERT_DIR"):
+        return {}
+    return {
+        "verify": truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT),
+    }
 
 
 class LLMClientError(Exception):
@@ -66,6 +110,22 @@ class LLMAPIError(LLMClientError):
 
 class LLMResponseFormatError(LLMClientError):
     """Empty, malformed or truncated completion."""
+
+
+class LLMConfigurationError(LLMClientError):
+    """The configured model or Gemini request is invalid or unavailable."""
+
+
+class LLMNetworkError(LLMClientError):
+    """The provider could not be reached over the network."""
+
+
+class LLMTimeoutError(LLMNetworkError):
+    """The provider connection or response exceeded the configured timeout."""
+
+
+class LLMTLSVerificationError(LLMNetworkError):
+    """The HTTPS certificate chain could not be verified securely."""
 
 
 class LLMClient(Protocol):
@@ -132,6 +192,7 @@ class GeminiClient:
                 http_options=types.HttpOptions(
                     timeout=timeout_ms,
                     retry_options=types.HttpRetryOptions(attempts=1),
+                    client_args=_secure_http_client_args(),
                 ),
             ) as client:
                 response = client.models.generate_content(
@@ -142,8 +203,12 @@ class GeminiClient:
         except errors.APIError as exc:
             _log_provider_failure(exc)
             status = getattr(exc, "code", None)
+            provider_status = str(getattr(exc, "status", "")).upper()
 
-            if status == 401:
+            if status == 401 or provider_status in {
+                "UNAUTHENTICATED",
+                "API_KEY_INVALID",
+            }:
                 raise LLMCredentialsError(
                     "The provider rejected the API key."
                 ) from None
@@ -155,14 +220,27 @@ class GeminiClient:
                 raise LLMThrottlingError(
                     "The provider quota was reached. Try again later."
                 ) from None
+            if status in {400, 404}:
+                raise LLMConfigurationError(
+                    "The configured Gemini model or request is unavailable."
+                ) from None
 
             raise LLMAPIError(
                 "The provider request failed. Check service status and model configuration."
             ) from None
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
+        except httpx.TimeoutException as exc:
             _log_provider_failure(exc)
-            raise LLMAPIError(
-                "The provider request failed. Check service status and model configuration."
+            raise LLMTimeoutError(
+                "The provider request timed out."
+            ) from None
+        except httpx.HTTPError as exc:
+            _log_provider_failure(exc)
+            if _has_cause(exc, ssl.SSLCertVerificationError):
+                raise LLMTLSVerificationError(
+                    "The provider TLS certificate could not be verified."
+                ) from None
+            raise LLMNetworkError(
+                "The provider could not be reached over the network."
             ) from None
         except Exception as exc:
             # Keep unexpected SDK failures sanitized; do not expose request

@@ -304,7 +304,11 @@ def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = No
                 """
             )
             st.subheader("Visualization")
-            chart_renderer(chart_spec, query_result=getattr(result, "query_result", None))
+            try:
+                chart_renderer(chart_spec, query_result=getattr(result, "query_result", None))
+            except Exception:
+                logger.exception("Failed to render chart")
+                st.warning("Chart could not be rendered")
 
     # 4. Collapsible SQL
     sql_text = getattr(result, "sql", None)

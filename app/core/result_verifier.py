@@ -41,16 +41,78 @@ def explanation_is_grounded(explanation: str, result: QueryResult) -> bool:
     """
     if not isinstance(explanation, str) or not explanation.strip():
         return False
-    values = {str(result.row_count)}
+
+    values: set[str] = {str(result.row_count)}
+    numeric_values: set[float] = {float(result.row_count)}
+
+    def _register_number(num_str: str) -> None:
+        values.add(num_str)
+        try:
+            num = float(num_str)
+            numeric_values.add(num)
+            if num.is_integer():
+                values.add(str(int(num)))
+            values.add(f"{num:g}")
+        except (ValueError, OverflowError):
+            pass
+
     for value in result.dataframe.to_numpy().ravel():
         if pd.isna(value):
             continue
         values.add(str(value))
         if isinstance(value, (int, float)):
-            values.add(f"{value:g}")
-    claims = re.findall(r"(?<![A-Za-z])[-+]?\d+(?:\.\d+)?(?:%|[kKmMbB])?", explanation)
+            _register_number(str(value))
+        elif isinstance(value, str):
+            cleaned_str = re.sub(r"(?<=\d),(?=\d)", "", value)
+            for embedded in re.findall(r"[-+]?\d+(?:\.\d+)?", cleaned_str):
+                _register_number(embedded)
+
+    # Strip structural list numbering / markdown headers (e.g. "1. ", "2) ", "### 1. ")
+    text = re.sub(r"(?m)^\s*(?:#+\s*)?\d+[\.\)]\s+", "", explanation)
+    # Strip common ordinals (e.g. "1st", "2nd", "3rd", "4th") so ranks are not treated as data claims
+    text = re.sub(r"\b\d+(?:st|nd|rd|th)\b", "", text, flags=re.IGNORECASE)
+    # Remove digit grouping commas (e.g. 1,000 -> 1000)
+    text = re.sub(r"(?<=\d),(?=\d)", "", text)
+
+    claims = re.findall(r"(?<![A-Za-z0-9_])[-+]?\d+(?:\.\d+)?(?:%|[kKmMbB])?", text)
     for claim in claims:
-        normalized = claim.rstrip("%kKmMbB")
-        if claim.endswith("%") or normalized not in values:
+        if claim in values:
+            continue
+
+        raw = claim.rstrip("%kKmMbB")
+        if raw in values:
+            continue
+
+        try:
+            val = float(raw)
+        except (ValueError, OverflowError):
             return False
+
+        suffix = claim[len(raw):].lower()
+        if suffix == "k":
+            val *= 1_000
+        elif suffix == "m":
+            val *= 1_000_000
+        elif suffix == "b":
+            val *= 1_000_000_000
+
+        candidates = [val]
+        if suffix == "%":
+            candidates.append(val / 100.0)
+
+        matched = False
+        for candidate in candidates:
+            if candidate.is_integer() and str(int(candidate)) in values:
+                matched = True
+                break
+            if f"{candidate:g}" in values:
+                matched = True
+                break
+            if any(abs(candidate - nv) < 1e-5 for nv in numeric_values):
+                matched = True
+                break
+
+        if not matched:
+            return False
+
     return True

@@ -100,6 +100,43 @@ def test_replacing_same_filename_resets_analysis(uploaded_app):
     assert app.session_state.conversation_history == []
 
 
+def test_replacing_catalog_with_one_file_clears_catalog_ui_state(monkeypatch):
+    """A later single-file selection cannot retain a retired catalog."""
+
+    monkeypatch.delenv('APP_ACCESS_PASSWORD', raising=False)
+    orders = BytesIO(b'customer_id,total\n1,10\n')
+    orders.name = 'orders.csv'
+    orders.size = len(orders.getvalue())
+    orders.file_id = 'orders'
+    customers = BytesIO(b'customer_id,name\n1,A\n')
+    customers.name = 'customers.csv'
+    customers.size = len(customers.getvalue())
+    customers.file_id = 'customers'
+    selected = [[orders, customers]]
+    monkeypatch.setattr(st, 'file_uploader', lambda *a, **kw: selected[0])
+    model = Mock()
+    model.generate_text.return_value = 'SELECT 1 AS value'
+    monkeypatch.setattr(
+        agent_module, 'QueryPlanner', lambda: QueryPlanner(llm_client=model)
+    )
+
+    app = AppTest.from_file(str(MAIN)).run(timeout=15)
+    assert not app.exception
+    assert app.session_state.dataset_catalog is not None
+
+    single = BytesIO(b'product,sales\nA,100\n')
+    single.name = 'sales.csv'
+    single.size = len(single.getvalue())
+    single.file_id = 'single'
+    selected[0] = single
+    app.run(timeout=15)
+
+    assert not app.exception
+    assert app.session_state.dataset_catalog is None
+    assert app.session_state.uploaded_filename == 'sales.csv'
+    assert app.session_state.dataframe['product'].tolist() == ['A']
+
+
 def test_large_upload_queries_all_rows_and_cleans_up(uploaded_app):
     app, current, _ = uploaded_app
     pair = b'A,100,' + b'x' * 100 + b'\nB,100,' + b'x' * 100 + b'\n'

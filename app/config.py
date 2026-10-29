@@ -11,14 +11,29 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 from dotenv import load_dotenv
 
-# Load variables from a local .env file if present. In cloud platforms and CI,
-# environment variables are injected
-# directly, so a missing .env file here is expected and not an error.
-load_dotenv()
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+def _load_project_dotenv(project_root: Path = PROJECT_ROOT) -> bool:
+    """Load this repository's optional local environment file.
+
+    ``load_dotenv()`` otherwise searches relative to the caller/current
+    directory, which makes ``streamlit run`` behave differently when it is
+    launched outside the repository root. Deployment-provided environment
+    variables retain precedence over the local development file.
+    """
+
+    return load_dotenv(
+        dotenv_path=project_root / ".env",
+        override=False,
+    )
+
+
+# In cloud platforms and CI, settings are injected directly, so the optional
+# local .env file may not exist. Its explicit path keeps local startup stable.
+_load_project_dotenv()
 
 
 def _get_int(name: str, default: int) -> int:
