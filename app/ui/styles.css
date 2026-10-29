@@ -4,47 +4,47 @@
    ================================================================ */
 
 :root {
-    --canvas: #0b0f19;
-    --canvas-subtle: #0d1322;
-    --surface: #111827;
-    --surface-card: #131d31;
-    --surface-elevated: #1e293b;
-    --surface-hover: #24324a;
-    --line: #1e293b;
-    --line-subtle: rgba(255, 255, 255, 0.08);
-    --line-bright: rgba(255, 255, 255, 0.14);
+    --canvas: #0B1020;
+    --canvas-subtle: #0E1428;
+    --surface: #111A2E;
+    --surface-card: #111A2E;
+    --surface-elevated: #162038;
+    --surface-hover: #1C2844;
+    --line: #1F2A44;
+    --line-subtle: rgba(31, 42, 68, 0.6);
+    --line-bright: rgba(34, 211, 238, 0.25);
     
-    --ink: #f8fafc;
-    --ink-secondary: #cbd5e1;
-    --muted: #94a3b8;
-    --subtle: #64748b;
+    --ink: #E6EAF2;
+    --ink-secondary: #E6EAF2;
+    --muted: #8B97B0;
+    --subtle: #8B97B0;
     
-    --primary: #0ea5e9;
-    --primary-hover: #38bdf8;
-    --primary-soft: rgba(14, 165, 233, 0.12);
-    --primary-glow: rgba(14, 165, 233, 0.25);
+    --primary: #22D3EE;
+    --primary-hover: #38BDF8;
+    --primary-soft: rgba(34, 211, 238, 0.12);
+    --primary-glow: rgba(34, 211, 238, 0.25);
     
-    --accent-teal: #14b8a6;
-    --accent-cyan: #06b6d4;
-    --accent-indigo: #6366f1;
+    --accent-teal: #14B8A6;
+    --accent-cyan: #22D3EE;
+    --accent-indigo: #6366F1;
     --accent-indigo-soft: rgba(99, 102, 241, 0.12);
     
-    --success: #10b981;
+    --success: #10B981;
     --success-soft: rgba(16, 185, 129, 0.12);
     --success-border: rgba(16, 185, 129, 0.3);
     
-    --warning: #f59e0b;
+    --warning: #F59E0B;
     --warning-soft: rgba(245, 158, 11, 0.12);
     --warning-border: rgba(245, 158, 11, 0.3);
     
-    --danger: #ef4444;
+    --danger: #EF4444;
     --danger-soft: rgba(239, 68, 68, 0.12);
     --danger-border: rgba(239, 68, 68, 0.3);
 
     --radius-sm: 8px;
     --radius-md: 12px;
-    --radius-lg: 16px;
-    --radius-xl: 20px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
     --shadow-card: 0 8px 24px -4px rgba(0, 0, 0, 0.45);
     --shadow-elevated: 0 16px 36px -6px rgba(0, 0, 0, 0.55);
 }
@@ -55,11 +55,11 @@
 
 .stApp {
     background:
-        radial-gradient(ellipse 90% 50% at 80% -10%, rgba(14, 165, 233, 0.08), transparent 50%),
-        radial-gradient(ellipse 70% 40% at 10% 20%, rgba(99, 102, 241, 0.06), transparent 45%),
+        radial-gradient(ellipse 90% 50% at 80% -10%, rgba(34, 211, 238, 0.07), transparent 50%),
+        radial-gradient(ellipse 70% 40% at 10% 20%, rgba(99, 102, 241, 0.05), transparent 45%),
         var(--canvas) !important;
-    color: var(--ink-secondary);
-    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     letter-spacing: -0.01em;
 }
 
@@ -599,16 +599,16 @@ section[data-testid="stSidebar"] div.stButton > button:disabled {
    ================================================================ */
 
 div[data-testid="stVerticalBlockBorderWrapper"] {
-    background: var(--surface-card) !important;
+    background: var(--surface) !important;
     border: 1px solid var(--line) !important;
-    border-radius: var(--radius-lg) !important;
+    border-radius: 12px !important;
     box-shadow: var(--shadow-card) !important;
     transition: border-color 0.2s ease;
     overflow: hidden;
 }
 
 div[data-testid="stVerticalBlockBorderWrapper"]:hover {
-    border-color: rgba(255, 255, 255, 0.12) !important;
+    border-color: rgba(34, 211, 238, 0.25) !important;
 }
 
 /* Card Header Badges */
@@ -654,10 +654,10 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {
 div[data-testid="stMetric"] {
     min-height: 108px;
     height: auto !important;
-    background: linear-gradient(180deg, #131d31 0%, #0f172a 100%) !important;
+    background: var(--surface) !important;
     border: 1px solid var(--line) !important;
-    border-radius: var(--radius-md) !important;
-    padding: 1.05rem 1.15rem !important;
+    border-radius: 12px !important;
+    padding: 16px !important;
     box-shadow: var(--shadow-card) !important;
     position: relative;
     overflow: visible !important;
