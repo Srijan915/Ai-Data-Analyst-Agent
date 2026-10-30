@@ -36,6 +36,7 @@ import html
 import os
 import sys
 from pathlib import Path
+import importlib.util
 
 
 # --------------------------------------------------------------------------
@@ -54,9 +55,25 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 
+
+# --------------------------------------------------------------------------
+# Plotly import diagnostic
+# --------------------------------------------------------------------------
+
+st.write("Python:", sys.version)
+st.write("Working directory:", os.getcwd())
+st.write("Python executable:", sys.executable)
+st.write("Plotly spec:", importlib.util.find_spec("plotly"))
+st.write("Python paths:", sys.path)
+
+
+# --------------------------------------------------------------------------
+# Plotly import
+# --------------------------------------------------------------------------
+
+import plotly.express as px
 
 # --------------------------------------------------------------------------
 # Application imports
