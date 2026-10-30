@@ -37,6 +37,8 @@ import os
 import sys
 from pathlib import Path
 import importlib.util
+import importlib.metadata
+import subprocess
 
 
 # --------------------------------------------------------------------------
@@ -59,14 +61,26 @@ import streamlit as st
 
 
 # --------------------------------------------------------------------------
-# Plotly import diagnostic
+# Cloud dependency diagnostic
 # --------------------------------------------------------------------------
 
 st.write("Python:", sys.version)
-st.write("Working directory:", os.getcwd())
 st.write("Python executable:", sys.executable)
 st.write("Plotly spec:", importlib.util.find_spec("plotly"))
-st.write("Python paths:", sys.path)
+
+try:
+    st.write("Installed Plotly version:", importlib.metadata.version("plotly"))
+except importlib.metadata.PackageNotFoundError:
+    st.error("Plotly distribution is NOT installed in this environment.")
+
+result = subprocess.run(
+    [sys.executable, "-m", "pip", "show", "plotly"],
+    capture_output=True,
+    text=True
+)
+
+st.write("Pip show output:", result.stdout)
+st.write("Pip show errors:", result.stderr)
 
 
 # --------------------------------------------------------------------------
@@ -74,7 +88,6 @@ st.write("Python paths:", sys.path)
 # --------------------------------------------------------------------------
 
 import plotly.express as px
-
 # --------------------------------------------------------------------------
 # Application imports
 # --------------------------------------------------------------------------
