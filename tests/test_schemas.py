@@ -2,7 +2,7 @@
 Tests for app.models.schemas.
 
 These tests verify the Pydantic data contracts shared between the
-different stages of the AI Data Analyst Agent pipeline.
+different stages of the QueryPilotAI pipeline.
 
 No Streamlit, external provider, DuckDB, or network access is required.
 """

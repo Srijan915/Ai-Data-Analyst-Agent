@@ -65,7 +65,7 @@ def _run_analysis(
 
     st.session_state.last_result = None
 
-    with st.spinner("Analyzing your question..."):
+    with st.spinner("Planning and checking SQL, then preparing your results..."):
 
         try:
 
@@ -80,7 +80,7 @@ def _run_analysis(
             )
 
         except AgentDataError as exc:
-            logger.warning("Analysis stopped by conversion fidelity check")
+            logger.warning("Analysis stopped because the request could not be answered safely")
             st.warning(str(exc))
             return
 
@@ -108,7 +108,7 @@ def _run_analysis(
             logger.exception("SQL validation failed")
 
             st.error(
-                "🛡️ The generated SQL did not pass the security checks."
+                "🛡️ The generated SQL did not pass the security checks. Try rephrasing your question."
             )
             return
 
@@ -117,7 +117,7 @@ def _run_analysis(
             logger.exception("SQL execution failed")
 
             st.error(
-                "❌ The validated SQL could not be executed."
+                "❌ The validated SQL could not be executed. Try a simpler question or check the dataset columns."
             )
             return
 
@@ -155,7 +155,7 @@ def _run_analysis(
 
 
 def _build_column_config(df: pd.DataFrame) -> dict:
-    """Build column_config mapping for formatted numeric and date displays."""
+    """Keep integer IDs readable without forcing float or timestamp precision."""
     col_config = {}
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         return col_config
@@ -165,16 +165,6 @@ def _build_column_config(df: pd.DataFrame) -> dict:
             col_config[col] = st.column_config.NumberColumn(
                 col,
                 format="%d",
-            )
-        elif pd.api.types.is_float_dtype(dtype):
-            col_config[col] = st.column_config.NumberColumn(
-                col,
-                format="%.2f",
-            )
-        elif pd.api.types.is_datetime64_any_dtype(dtype):
-            col_config[col] = st.column_config.DatetimeColumn(
-                col,
-                format="YYYY-MM-DD",
             )
     return col_config
 
@@ -202,7 +192,15 @@ def _determine_result_state(result: Any) -> Tuple[str, str, str]:
     if getattr(query_result, "truncated", False):
         return "warning", "⚠️", "Analysis result reached the maximum row limit and was truncated."
 
-    return "success", "✅", "Analysis completed successfully and verified against the dataset."
+    return "success", "✅", "Query completed. Review the result and SQL below."
+
+
+def _download_results(dataframe):
+    st.download_button(
+        "Export results as CSV",
+        data=dataframe.to_csv(index=False).encode("utf-8-sig"),
+        file_name="query_results.csv", mime="text/csv", key="export_query_results",
+    )
 
 
 def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = None) -> None:
@@ -223,7 +221,7 @@ def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = No
                 ANALYSIS RESULT
             </div>
             <div class="result-badge">
-                Verified Output
+                Query complete
             </div>
         </div>
         """
@@ -281,6 +279,9 @@ def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = No
             else:
                 st.caption(f"Rows returned: {query_result.row_count:,}")
 
+            if df.empty:
+                st.info("No rows matched this query. Try adjusting the question or filters.")
+
             col_cfg = _build_column_config(df)
             st.dataframe(
                 df,
@@ -288,6 +289,7 @@ def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = No
                 hide_index=True,
                 column_config=col_cfg,
             )
+            _download_results(df)
         else:
             st.caption("No tabular result is available for this question.")
 
@@ -311,8 +313,10 @@ def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = No
                 st.warning("Chart could not be rendered")
 
     # 4. Collapsible SQL
-    sql_text = getattr(result, "sql", None)
+    validation = getattr(result, "validation", None)
+    executed_sql = getattr(validation, "cleaned_sql", None)
+    sql_text = executed_sql if isinstance(executed_sql, str) and executed_sql else getattr(result, "sql", None)
     if sql_text:
         with st.expander("Generated SQL", expanded=False):
-            st.caption("Executed safely in sandboxed DuckDB query engine")
+            st.caption("Validated SQL sent to DuckDB, including any enforced row limit.")
             st.code(sql_text, language="sql")

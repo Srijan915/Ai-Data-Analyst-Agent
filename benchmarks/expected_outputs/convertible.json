@@ -1,0 +1,39 @@
+{
+  "seed": 42,
+  "source_rows": 3900,
+  "duplicate_indices": [],
+  "whitespace_cells": [],
+  "messy_columns": {},
+  "leading_zero_indices": [
+    187,
+    2708,
+    933,
+    3166,
+    1185,
+    326,
+    3503,
+    953,
+    3549,
+    413,
+    1556,
+    1138,
+    1857,
+    2603,
+    3416,
+    1494,
+    666,
+    1516,
+    1455,
+    858
+  ],
+  "convertible_columns": [
+    "Age",
+    "Purchase Amount (USD)",
+    "Review Rating",
+    "Previous Purchases"
+  ],
+  "selected_operations": [
+    "Correct data types"
+  ],
+  "dataset_rows": 3900
+}

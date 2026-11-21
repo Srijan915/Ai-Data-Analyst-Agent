@@ -58,6 +58,8 @@ def test_project_dotenv_is_loaded_from_explicit_root_not_current_directory(
     monkeypatch,
     tmp_path,
 ):
+    # This test reads its own synthetic fixture, even in secret-free runs.
+    monkeypatch.delenv("PYTHON_DOTENV_DISABLED", raising=False)
     project_root = tmp_path / "project"
     project_root.mkdir()
     (project_root / ".env").write_text(

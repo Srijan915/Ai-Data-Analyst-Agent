@@ -26,6 +26,8 @@ ENV/
 
 # --- Testing ---
 .pytest_cache/
+.ruff_cache/
+.clean-install-check/
 .coverage
 htmlcov/
 

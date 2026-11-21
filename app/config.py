@@ -54,7 +54,7 @@ class AppConfig:
     """Immutable, type-safe application configuration."""
 
     # --- Application ---
-    app_name: str = "AI Data Analyst Agent"
+    app_name: str = "QueryPilotAI"
     app_env: str = "development"
     log_level: str = "INFO"
 

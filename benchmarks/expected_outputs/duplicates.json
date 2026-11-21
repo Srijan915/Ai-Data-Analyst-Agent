@@ -1,0 +1,49 @@
+{
+  "seed": 42,
+  "source_rows": 3900,
+  "duplicate_indices": [
+    3900,
+    3901,
+    3902,
+    3903,
+    3904,
+    3905,
+    3906,
+    3907,
+    3908,
+    3909,
+    3910,
+    3911,
+    3912,
+    3913,
+    3914,
+    3915,
+    3916,
+    3917,
+    3918,
+    3919,
+    3920,
+    3921,
+    3922,
+    3923,
+    3924,
+    3925,
+    3926,
+    3927,
+    3928,
+    3929
+  ],
+  "whitespace_cells": [],
+  "messy_columns": {},
+  "leading_zero_indices": [],
+  "convertible_columns": [
+    "Age",
+    "Purchase Amount (USD)",
+    "Review Rating",
+    "Previous Purchases"
+  ],
+  "selected_operations": [
+    "Remove duplicates"
+  ],
+  "dataset_rows": 3930
+}

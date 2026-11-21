@@ -51,3 +51,15 @@ def test_unsupported_explanation_figure_is_not_grounded():
     result = QueryResult(dataframe=pd.DataFrame({"total": [10]}), row_count=1, truncated=False)
     assert explanation_is_grounded("The total is 10.", result)
     assert not explanation_is_grounded("The total is 999.", result)
+
+
+def test_embedded_identifier_number_supports_unsigned_numeric_claim():
+    """A hyphen in an identifier must not turn its numeric suffix negative."""
+    result = QueryResult(
+        dataframe=pd.DataFrame({"batch": ["batch-12"]}),
+        row_count=1,
+        truncated=False,
+    )
+
+    assert explanation_is_grounded("The batch number is 12.", result)
+    assert not explanation_is_grounded("The batch number is 13.", result)

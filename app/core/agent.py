@@ -1,5 +1,5 @@
 """
-Main orchestration layer for the AI Data Analyst Agent.
+Main orchestration layer for QueryPilotAI.
 
 Pipeline:
 
@@ -81,7 +81,7 @@ logger = get_logger(__name__)
 
 
 class AgentError(Exception):
-    """Base class for errors raised by the AI Data Analyst Agent."""
+    """Base class for errors raised by QueryPilotAI."""
 
 
 class AgentValidationError(AgentError):
@@ -281,6 +281,7 @@ class DataAnalystAgent:
         self._max_explanation_rows = max_explanation_rows
         self._max_chart_rows = max_chart_rows
         self._max_categories = max_categories
+        self._last_generated_sql: Optional[str] = None
 
         logger.info(
             "DataAnalystAgent initialized | rows=%d | "
@@ -344,6 +345,11 @@ class DataAnalystAgent:
     def max_result_rows(self) -> int:
         """Return the maximum number of query-result rows."""
         return self._max_result_rows
+
+    @property
+    def last_generated_sql(self) -> Optional[str]:
+        """Return SQL from the current/most-recent run for safe diagnostics."""
+        return self._last_generated_sql
 
     @_limit_concurrent_analyses
     def run(
@@ -411,14 +417,19 @@ class DataAnalystAgent:
         if not self._memory_finalizer.alive:
             raise AgentDataError("This dataset has been cleared. Upload it again before analyzing.")
         question = question.strip()
-
-        # The legacy single-table path remains compatible with existing
-        # planner behavior. Multi-table requests need a deterministic gate so
-        # an unconfirmed inferred relationship can never become a join.
+        self._last_generated_sql = None
         if self._dataset_catalog is not None:
-            answerability = assess_answerability(question, self._execution_profile)
-            if answerability.outcome != Answerability.ANSWERABLE:
-                raise AgentDataError(answerability.message)
+            # Relationship approval/revocation is live session state, not a
+            # snapshot taken when the uploads first arrived.
+            self._execution_profile = self._dataset_catalog.profile
+
+        # Apply the same deterministic schema gate to both single-dataset and
+        # catalog runs.  Otherwise a single CSV could send plainly absent-data
+        # requests to the LLM and turn them into hallucinated SQL/execution
+        # errors instead of a useful refusal.
+        answerability = assess_answerability(question, self._execution_profile)
+        if answerability.outcome != Answerability.ANSWERABLE:
+            raise AgentDataError(answerability.message)
 
         logger.info(
             "Starting agent run | question_length=%d",
@@ -461,6 +472,7 @@ class DataAnalystAgent:
             )
 
         sql = sql.strip()
+        self._last_generated_sql = sql
 
         logger.info(
             "Query planning completed | duration_ms=%.1f | sql_length=%d",
@@ -538,6 +550,13 @@ class DataAnalystAgent:
                     "SQL security validation succeeded but "
                     "produced no cleaned SQL."
                 )
+
+            if self._dataset_catalog is not None:
+                from app.core.join_validation import JoinValidationError, check_catalog_joins
+                try:
+                    check_catalog_joins(validation.cleaned_sql, self._dataset_catalog.profile)
+                except JoinValidationError as exc:
+                    raise AgentDataError(str(exc)) from None
 
             logger.info(
                 "SQL security validation passed | duration_ms=%.1f",

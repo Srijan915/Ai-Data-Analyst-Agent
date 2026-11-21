@@ -1,0 +1,21 @@
+{
+  "seed": 42,
+  "source_rows": 3900,
+  "duplicate_indices": [],
+  "whitespace_cells": [],
+  "messy_columns": {
+    "Category": " Category $ ",
+    "Gender": "GENDER"
+  },
+  "leading_zero_indices": [],
+  "convertible_columns": [
+    "Age",
+    "Purchase Amount (USD)",
+    "Review Rating",
+    "Previous Purchases"
+  ],
+  "selected_operations": [
+    "Clean column names"
+  ],
+  "dataset_rows": 3900
+}

@@ -1,0 +1,2112 @@
+{
+  "total_cases": 20,
+  "correct_cases": 18,
+  "incorrect_cases": 2,
+  "provider_errors": 0,
+  "planning_errors": 0,
+  "evaluable_cases": 20,
+  "accuracy_percent": 90.0,
+  "total_runs": 20,
+  "correct_runs": 18,
+  "case_results": [
+    {
+      "id": "sa01",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    COUNT(\"customer_id\") AS \"Number of Customer Records\",\n    SUM(\"purchase_amount_usd\") AS \"Total Purchase Amount USD\"\nFROM \"dataset\"",
+      "expected_result": {
+        "columns": [
+          "customer_records",
+          "total_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "customer_records": "int64",
+          "total_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "customer_records": 3900,
+            "total_purchase_amount_usd": 233081.0
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "Number of Customer Records",
+          "Total Purchase Amount USD"
+        ],
+        "dtypes": {
+          "Number of Customer Records": "int64",
+          "Total Purchase Amount USD": "float64"
+        },
+        "rows": [
+          {
+            "Number of Customer Records": 3900,
+            "Total Purchase Amount USD": 233081.0
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "sa02",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    ROUND(AVG(\"purchase_amount_usd\"), 2) AS \"Average Purchase Amount USD\",\n    MIN(\"purchase_amount_usd\") AS \"Minimum Purchase Amount USD\",\n    MAX(\"purchase_amount_usd\") AS \"Maximum Purchase Amount USD\"\nFROM \"dataset\"",
+      "expected_result": {
+        "columns": [
+          "average_purchase_amount_usd",
+          "minimum_purchase_amount_usd",
+          "maximum_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "average_purchase_amount_usd": "float64",
+          "minimum_purchase_amount_usd": "int64",
+          "maximum_purchase_amount_usd": "int64"
+        },
+        "rows": [
+          {
+            "average_purchase_amount_usd": 59.76,
+            "minimum_purchase_amount_usd": 20,
+            "maximum_purchase_amount_usd": 100
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "Average Purchase Amount USD",
+          "Minimum Purchase Amount USD",
+          "Maximum Purchase Amount USD"
+        ],
+        "dtypes": {
+          "Average Purchase Amount USD": "float64",
+          "Minimum Purchase Amount USD": "int64",
+          "Maximum Purchase Amount USD": "int64"
+        },
+        "rows": [
+          {
+            "Average Purchase Amount USD": 59.76,
+            "Minimum Purchase Amount USD": 20,
+            "Maximum Purchase Amount USD": 100
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "sa03",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT \n    ROUND(AVG(\"age\"), 2) AS \"Average Age\",\n    ROUND(AVG(\"previous_purchases\"), 2) AS \"Average Previous Purchases\"\nFROM \"dataset\"",
+      "expected_result": {
+        "columns": [
+          "average_age",
+          "average_previous_purchases"
+        ],
+        "dtypes": {
+          "average_age": "float64",
+          "average_previous_purchases": "float64"
+        },
+        "rows": [
+          {
+            "average_age": 44.07,
+            "average_previous_purchases": 25.35
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "Average Age",
+          "Average Previous Purchases"
+        ],
+        "dtypes": {
+          "Average Age": "float64",
+          "Average Previous Purchases": "float64"
+        },
+        "rows": [
+          {
+            "Average Age": 44.07,
+            "Average Previous Purchases": 25.35
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "sa04",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    ROUND(AVG(\"review_rating\"), 2) AS \"Average Review Rating\",\n    MIN(\"review_rating\") AS \"Minimum Review Rating\",\n    MAX(\"review_rating\") AS \"Maximum Review Rating\",\n    SUM(CASE WHEN \"review_rating\" IS NULL THEN 1 ELSE 0 END) AS \"Missing Review Ratings Count\"\nFROM \"dataset\"",
+      "expected_result": {
+        "columns": [
+          "average_review_rating",
+          "minimum_review_rating",
+          "maximum_review_rating",
+          "missing_review_ratings"
+        ],
+        "dtypes": {
+          "average_review_rating": "float64",
+          "minimum_review_rating": "float64",
+          "maximum_review_rating": "float64",
+          "missing_review_ratings": "int64"
+        },
+        "rows": [
+          {
+            "average_review_rating": 3.75,
+            "minimum_review_rating": 2.5,
+            "maximum_review_rating": 5.0,
+            "missing_review_ratings": 37
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "Average Review Rating",
+          "Minimum Review Rating",
+          "Maximum Review Rating",
+          "Missing Review Ratings Count"
+        ],
+        "dtypes": {
+          "Average Review Rating": "float64",
+          "Minimum Review Rating": "float64",
+          "Maximum Review Rating": "float64",
+          "Missing Review Ratings Count": "float64"
+        },
+        "rows": [
+          {
+            "Average Review Rating": 3.75,
+            "Minimum Review Rating": 2.5,
+            "Maximum Review Rating": 5.0,
+            "Missing Review Ratings Count": 37.0
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "gb01",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    \"category\",\n    COUNT(\"customer_id\") AS \"record count\",\n    SUM(\"purchase_amount_usd\") AS \"total purchase amount\",\n    ROUND(AVG(\"purchase_amount_usd\"), 2) AS \"average purchase amount\"\nFROM \"dataset\"\nGROUP BY \"category\"",
+      "expected_result": {
+        "columns": [
+          "category",
+          "record_count",
+          "total_purchase_amount_usd",
+          "average_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "category": "object",
+          "record_count": "int64",
+          "total_purchase_amount_usd": "float64",
+          "average_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "category": "Clothing",
+            "record_count": 1737,
+            "total_purchase_amount_usd": 104264.0,
+            "average_purchase_amount_usd": 60.03
+          },
+          {
+            "category": "Accessories",
+            "record_count": 1240,
+            "total_purchase_amount_usd": 74200.0,
+            "average_purchase_amount_usd": 59.84
+          },
+          {
+            "category": "Footwear",
+            "record_count": 599,
+            "total_purchase_amount_usd": 36093.0,
+            "average_purchase_amount_usd": 60.26
+          },
+          {
+            "category": "Outerwear",
+            "record_count": 324,
+            "total_purchase_amount_usd": 18524.0,
+            "average_purchase_amount_usd": 57.17
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "category",
+          "record count",
+          "total purchase amount",
+          "average purchase amount"
+        ],
+        "dtypes": {
+          "category": "object",
+          "record count": "int64",
+          "total purchase amount": "float64",
+          "average purchase amount": "float64"
+        },
+        "rows": [
+          {
+            "category": "Clothing",
+            "record count": 1737,
+            "total purchase amount": 104264.0,
+            "average purchase amount": 60.03
+          },
+          {
+            "category": "Accessories",
+            "record count": 1240,
+            "total purchase amount": 74200.0,
+            "average purchase amount": 59.84
+          },
+          {
+            "category": "Footwear",
+            "record count": 599,
+            "total purchase amount": 36093.0,
+            "average purchase amount": 60.26
+          },
+          {
+            "category": "Outerwear",
+            "record count": 324,
+            "total purchase amount": 18524.0,
+            "average purchase amount": 57.17
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "gb02",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    CASE\n        WHEN \"age\" BETWEEN 18 AND 29 THEN '18-29'\n        WHEN \"age\" BETWEEN 30 AND 44 THEN '30-44'\n        WHEN \"age\" BETWEEN 45 AND 59 THEN '45-59'\n        WHEN \"age\" BETWEEN 60 AND 70 THEN '60-70'\n    END AS \"age_band\",\n    COUNT(*) AS \"record_count\",\n    ROUND(AVG(\"purchase_amount_usd\"), 2) AS \"average_purchase_amount\"\nFROM \"dataset\"\nWHERE \"age\" BETWEEN 18 AND 70\nGROUP BY \"age_band\"\nORDER BY \"age_band\"",
+      "expected_result": {
+        "columns": [
+          "age_band",
+          "record_count",
+          "average_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "age_band": "object",
+          "record_count": "int64",
+          "average_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "age_band": "18-29",
+            "record_count": 878,
+            "average_purchase_amount_usd": 60.26
+          },
+          {
+            "age_band": "30-44",
+            "record_count": 1092,
+            "average_purchase_amount_usd": 59.72
+          },
+          {
+            "age_band": "45-59",
+            "record_count": 1142,
+            "average_purchase_amount_usd": 59.6
+          },
+          {
+            "age_band": "60-70",
+            "record_count": 788,
+            "average_purchase_amount_usd": 59.51
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "age_band",
+          "record_count",
+          "average_purchase_amount"
+        ],
+        "dtypes": {
+          "age_band": "object",
+          "record_count": "int64",
+          "average_purchase_amount": "float64"
+        },
+        "rows": [
+          {
+            "age_band": "18-29",
+            "record_count": 878,
+            "average_purchase_amount": 60.26
+          },
+          {
+            "age_band": "30-44",
+            "record_count": 1092,
+            "average_purchase_amount": 59.72
+          },
+          {
+            "age_band": "45-59",
+            "record_count": 1142,
+            "average_purchase_amount": 59.6
+          },
+          {
+            "age_band": "60-70",
+            "record_count": 788,
+            "average_purchase_amount": 59.51
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "gb03",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    \"gender\",\n    COUNT(*) AS \"record_count\",\n    SUM(\"purchase_amount_usd\") AS \"total_purchase_amount\",\n    ROUND(AVG(\"previous_purchases\"), 2) AS \"average_previous_purchases\"\nFROM \"dataset\"\nGROUP BY \"gender\"",
+      "expected_result": {
+        "columns": [
+          "gender",
+          "record_count",
+          "total_purchase_amount_usd",
+          "average_previous_purchases"
+        ],
+        "dtypes": {
+          "gender": "object",
+          "record_count": "int64",
+          "total_purchase_amount_usd": "float64",
+          "average_previous_purchases": "float64"
+        },
+        "rows": [
+          {
+            "gender": "Female",
+            "record_count": 1248,
+            "total_purchase_amount_usd": 75191.0,
+            "average_previous_purchases": 24.6
+          },
+          {
+            "gender": "Male",
+            "record_count": 2652,
+            "total_purchase_amount_usd": 157890.0,
+            "average_previous_purchases": 25.71
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "gender",
+          "record_count",
+          "total_purchase_amount",
+          "average_previous_purchases"
+        ],
+        "dtypes": {
+          "gender": "object",
+          "record_count": "int64",
+          "total_purchase_amount": "float64",
+          "average_previous_purchases": "float64"
+        },
+        "rows": [
+          {
+            "gender": "Male",
+            "record_count": 2652,
+            "total_purchase_amount": 157890.0,
+            "average_previous_purchases": 25.71
+          },
+          {
+            "gender": "Female",
+            "record_count": 1248,
+            "total_purchase_amount": 75191.0,
+            "average_previous_purchases": 24.6
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "gb04",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    \"season\",\n    COUNT(*) AS \"record_count\",\n    SUM(\"purchase_amount_usd\") AS \"total_purchase_amount\"\nFROM \"dataset\"\nGROUP BY \"season\"",
+      "expected_result": {
+        "columns": [
+          "season",
+          "record_count",
+          "total_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "season": "object",
+          "record_count": "int64",
+          "total_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "season": "Fall",
+            "record_count": 975,
+            "total_purchase_amount_usd": 60018.0
+          },
+          {
+            "season": "Spring",
+            "record_count": 999,
+            "total_purchase_amount_usd": 58679.0
+          },
+          {
+            "season": "Winter",
+            "record_count": 971,
+            "total_purchase_amount_usd": 58607.0
+          },
+          {
+            "season": "Summer",
+            "record_count": 955,
+            "total_purchase_amount_usd": 55777.0
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "season",
+          "record_count",
+          "total_purchase_amount"
+        ],
+        "dtypes": {
+          "season": "object",
+          "record_count": "int64",
+          "total_purchase_amount": "float64"
+        },
+        "rows": [
+          {
+            "season": "Spring",
+            "record_count": 999,
+            "total_purchase_amount": 58679.0
+          },
+          {
+            "season": "Winter",
+            "record_count": 971,
+            "total_purchase_amount": 58607.0
+          },
+          {
+            "season": "Summer",
+            "record_count": 955,
+            "total_purchase_amount": 55777.0
+          },
+          {
+            "season": "Fall",
+            "record_count": 975,
+            "total_purchase_amount": 60018.0
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "fc01",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    COUNT(*) AS \"record_count\",\n    ROUND(AVG(\"purchase_amount_usd\"), 2) AS \"average_purchase_amount\"\nFROM \"dataset\"\nWHERE \"gender\" = 'Female'\n  AND \"age\" >= 50\n  AND \"purchase_amount_usd\" >= 80",
+      "expected_result": {
+        "columns": [
+          "record_count",
+          "average_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "record_count": "int64",
+          "average_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "record_count": 139,
+            "average_purchase_amount_usd": 89.38
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "record_count",
+          "average_purchase_amount"
+        ],
+        "dtypes": {
+          "record_count": "int64",
+          "average_purchase_amount": "float64"
+        },
+        "rows": [
+          {
+            "record_count": 139,
+            "average_purchase_amount": 89.38
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "fc02",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    COUNT(*) AS \"Record Count\",\n    SUM(\"purchase_amount_usd\") AS \"Total Purchase Amount\"\nFROM \"dataset\"\nWHERE \"gender\" = 'Male'\n  AND \"subscription_status\" = 'Yes'\n  AND \"previous_purchases\" >= 25",
+      "expected_result": {
+        "columns": [
+          "record_count",
+          "total_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "record_count": "int64",
+          "total_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "record_count": 569,
+            "total_purchase_amount_usd": 33570.0
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "Record Count",
+          "Total Purchase Amount"
+        ],
+        "dtypes": {
+          "Record Count": "int64",
+          "Total Purchase Amount": "float64"
+        },
+        "rows": [
+          {
+            "Record Count": 569,
+            "Total Purchase Amount": 33570.0
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "fc03",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT \n    COUNT(*) AS \"Record Count\",\n    ROUND(AVG(\"purchase_amount_usd\"), 2) AS \"Average Purchase Amount\"\nFROM \"dataset\"\nWHERE \"review_rating\" IS NULL",
+      "expected_result": {
+        "columns": [
+          "missing_rating_records",
+          "average_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "missing_rating_records": "int64",
+          "average_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "missing_rating_records": 37,
+            "average_purchase_amount_usd": 66.27
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "Record Count",
+          "Average Purchase Amount"
+        ],
+        "dtypes": {
+          "Record Count": "int64",
+          "Average Purchase Amount": "float64"
+        },
+        "rows": [
+          {
+            "Record Count": 37,
+            "Average Purchase Amount": 66.27
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "fc04",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    COUNT(*) AS \"record_count\",\n    ROUND(AVG(\"purchase_amount_usd\"), 2) AS \"average_purchase_amount\"\nFROM \"dataset\"\nWHERE \"subscription_status\" = 'No'\n  AND \"review_rating\" >= 4.5\n  AND \"discount_applied\" = 'No'",
+      "expected_result": {
+        "columns": [
+          "record_count",
+          "average_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "record_count": "int64",
+          "average_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "record_count": 481,
+            "average_purchase_amount_usd": 60.49
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "record_count",
+          "average_purchase_amount"
+        ],
+        "dtypes": {
+          "record_count": "int64",
+          "average_purchase_amount": "float64"
+        },
+        "rows": [
+          {
+            "record_count": 481,
+            "average_purchase_amount": 60.49
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "ws01",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    \"category\",\n    SUM(\"purchase_amount_usd\") AS \"total_purchase_amount\",\n    ROW_NUMBER() OVER (ORDER BY SUM(\"purchase_amount_usd\") DESC, \"category\" ASC) AS \"rank\"\nFROM \"dataset\"\nGROUP BY \"category\"\nORDER BY \"total_purchase_amount\" DESC, \"category\" ASC",
+      "expected_result": {
+        "columns": [
+          "category",
+          "total_purchase_amount_usd",
+          "revenue_rank"
+        ],
+        "dtypes": {
+          "category": "object",
+          "total_purchase_amount_usd": "float64",
+          "revenue_rank": "int64"
+        },
+        "rows": [
+          {
+            "category": "Clothing",
+            "total_purchase_amount_usd": 104264.0,
+            "revenue_rank": 1
+          },
+          {
+            "category": "Accessories",
+            "total_purchase_amount_usd": 74200.0,
+            "revenue_rank": 2
+          },
+          {
+            "category": "Footwear",
+            "total_purchase_amount_usd": 36093.0,
+            "revenue_rank": 3
+          },
+          {
+            "category": "Outerwear",
+            "total_purchase_amount_usd": 18524.0,
+            "revenue_rank": 4
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "category",
+          "total_purchase_amount",
+          "rank"
+        ],
+        "dtypes": {
+          "category": "object",
+          "total_purchase_amount": "float64",
+          "rank": "int64"
+        },
+        "rows": [
+          {
+            "category": "Clothing",
+            "total_purchase_amount": 104264.0,
+            "rank": 1
+          },
+          {
+            "category": "Accessories",
+            "total_purchase_amount": 74200.0,
+            "rank": 2
+          },
+          {
+            "category": "Footwear",
+            "total_purchase_amount": 36093.0,
+            "rank": 3
+          },
+          {
+            "category": "Outerwear",
+            "total_purchase_amount": 18524.0,
+            "rank": 4
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "ws02",
+      "run": 1,
+      "answerable": true,
+      "correct": false,
+      "outcome": "result_mismatch",
+      "generated_sql": "SELECT\n    \"category\",\n    \"customer_id\",\n    \"age\",\n    \"gender\",\n    \"item_purchased\",\n    \"purchase_amount_usd\",\n    \"location\",\n    \"size\",\n    \"color\",\n    \"season\",\n    \"review_rating\",\n    \"subscription_status\",\n    \"shipping_type\",\n    \"discount_applied\",\n    \"promo_code_used\",\n    \"previous_purchases\",\n    \"payment_method\",\n    \"frequency_of_purchases\"\nFROM (\n    SELECT\n        *,\n        ROW_NUMBER() OVER (\n            PARTITION BY \"category\"\n            ORDER BY \"purchase_amount_usd\" DESC, \"customer_id\" ASC\n        ) as rn\n    FROM \"dataset\"\n) sub\nWHERE rn = 1",
+      "expected_result": {
+        "columns": [
+          "category",
+          "customer_id",
+          "item_purchased",
+          "purchase_amount_usd"
+        ],
+        "dtypes": {
+          "category": "object",
+          "customer_id": "int64",
+          "item_purchased": "object",
+          "purchase_amount_usd": "int64"
+        },
+        "rows": [
+          {
+            "category": "Accessories",
+            "customer_id": 194,
+            "item_purchased": "Belt",
+            "purchase_amount_usd": 100
+          },
+          {
+            "category": "Clothing",
+            "customer_id": 456,
+            "item_purchased": "Blouse",
+            "purchase_amount_usd": 100
+          },
+          {
+            "category": "Footwear",
+            "customer_id": 96,
+            "item_purchased": "Sneakers",
+            "purchase_amount_usd": 100
+          },
+          {
+            "category": "Outerwear",
+            "customer_id": 43,
+            "item_purchased": "Coat",
+            "purchase_amount_usd": 100
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "category",
+          "customer_id",
+          "age",
+          "gender",
+          "item_purchased",
+          "purchase_amount_usd",
+          "location",
+          "size",
+          "color",
+          "season",
+          "review_rating",
+          "subscription_status",
+          "shipping_type",
+          "discount_applied",
+          "promo_code_used",
+          "previous_purchases",
+          "payment_method",
+          "frequency_of_purchases"
+        ],
+        "dtypes": {
+          "category": "object",
+          "customer_id": "int64",
+          "age": "int64",
+          "gender": "object",
+          "item_purchased": "object",
+          "purchase_amount_usd": "int64",
+          "location": "object",
+          "size": "object",
+          "color": "object",
+          "season": "object",
+          "review_rating": "float64",
+          "subscription_status": "object",
+          "shipping_type": "object",
+          "discount_applied": "object",
+          "promo_code_used": "object",
+          "previous_purchases": "int64",
+          "payment_method": "object",
+          "frequency_of_purchases": "object"
+        },
+        "rows": [
+          {
+            "category": "Outerwear",
+            "customer_id": 43,
+            "age": 20,
+            "gender": "Male",
+            "item_purchased": "Coat",
+            "purchase_amount_usd": 100,
+            "location": "Tennessee",
+            "size": "M",
+            "color": "Beige",
+            "season": "Spring",
+            "review_rating": 4.1,
+            "subscription_status": "Yes",
+            "shipping_type": "Free Shipping",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 15,
+            "payment_method": "PayPal",
+            "frequency_of_purchases": "Annually"
+          },
+          {
+            "category": "Accessories",
+            "customer_id": 194,
+            "age": 36,
+            "gender": "Male",
+            "item_purchased": "Belt",
+            "purchase_amount_usd": 100,
+            "location": "North Dakota",
+            "size": "S",
+            "color": "Silver",
+            "season": "Fall",
+            "review_rating": 3.0,
+            "subscription_status": "Yes",
+            "shipping_type": "Standard",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 29,
+            "payment_method": "Venmo",
+            "frequency_of_purchases": "Annually"
+          },
+          {
+            "category": "Footwear",
+            "customer_id": 96,
+            "age": 37,
+            "gender": "Male",
+            "item_purchased": "Sneakers",
+            "purchase_amount_usd": 100,
+            "location": "Missouri",
+            "size": "L",
+            "color": "Pink",
+            "season": "Fall",
+            "review_rating": 3.8,
+            "subscription_status": "Yes",
+            "shipping_type": "Free Shipping",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 48,
+            "payment_method": "PayPal",
+            "frequency_of_purchases": "Monthly"
+          },
+          {
+            "category": "Clothing",
+            "customer_id": 456,
+            "age": 54,
+            "gender": "Male",
+            "item_purchased": "Blouse",
+            "purchase_amount_usd": 100,
+            "location": "Utah",
+            "size": "XL",
+            "color": "Gold",
+            "season": "Fall",
+            "review_rating": 3.6,
+            "subscription_status": "Yes",
+            "shipping_type": "Store Pickup",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 50,
+            "payment_method": "Debit Card",
+            "frequency_of_purchases": "Fortnightly"
+          }
+        ]
+      },
+      "failure_reason": "column_count_mismatch: actual=18, expected=4"
+    },
+    {
+      "id": "ws03",
+      "run": 1,
+      "answerable": true,
+      "correct": false,
+      "outcome": "result_mismatch",
+      "generated_sql": "SELECT \"customer_id\", \"age\", \"gender\", \"item_purchased\", \"category\", \"purchase_amount_usd\", \"location\", \"size\", \"color\", \"season\", \"review_rating\", \"subscription_status\", \"shipping_type\", \"discount_applied\", \"promo_code_used\", \"previous_purchases\", \"payment_method\", \"frequency_of_purchases\"\nFROM (\n    SELECT *,\n           AVG(\"purchase_amount_usd\") OVER (PARTITION BY \"category\") AS \"cat_avg\"\n    FROM \"dataset\"\n)\nWHERE \"purchase_amount_usd\" > \"cat_avg\"\nORDER BY \"category\", \"customer_id\"\nLIMIT 20",
+      "expected_result": {
+        "columns": [
+          "customer_id",
+          "category",
+          "item_purchased",
+          "purchase_amount_usd",
+          "category_average_purchase_amount_usd"
+        ],
+        "dtypes": {
+          "customer_id": "int64",
+          "category": "object",
+          "item_purchased": "object",
+          "purchase_amount_usd": "int64",
+          "category_average_purchase_amount_usd": "float64"
+        },
+        "rows": [
+          {
+            "customer_id": 29,
+            "category": "Accessories",
+            "item_purchased": "Handbag",
+            "purchase_amount_usd": 94,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 41,
+            "category": "Accessories",
+            "item_purchased": "Handbag",
+            "purchase_amount_usd": 76,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 44,
+            "category": "Accessories",
+            "item_purchased": "Scarf",
+            "purchase_amount_usd": 69,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 57,
+            "category": "Accessories",
+            "item_purchased": "Backpack",
+            "purchase_amount_usd": 73,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 60,
+            "category": "Accessories",
+            "item_purchased": "Belt",
+            "purchase_amount_usd": 79,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 62,
+            "category": "Accessories",
+            "item_purchased": "Scarf",
+            "purchase_amount_usd": 68,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 64,
+            "category": "Accessories",
+            "item_purchased": "Sunglasses",
+            "purchase_amount_usd": 79,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 70,
+            "category": "Accessories",
+            "item_purchased": "Belt",
+            "purchase_amount_usd": 70,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 76,
+            "category": "Accessories",
+            "item_purchased": "Scarf",
+            "purchase_amount_usd": 85,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 86,
+            "category": "Accessories",
+            "item_purchased": "Sunglasses",
+            "purchase_amount_usd": 95,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 92,
+            "category": "Accessories",
+            "item_purchased": "Scarf",
+            "purchase_amount_usd": 99,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 97,
+            "category": "Accessories",
+            "item_purchased": "Gloves",
+            "purchase_amount_usd": 73,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 101,
+            "category": "Accessories",
+            "item_purchased": "Sunglasses",
+            "purchase_amount_usd": 98,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 106,
+            "category": "Accessories",
+            "item_purchased": "Backpack",
+            "purchase_amount_usd": 96,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 112,
+            "category": "Accessories",
+            "item_purchased": "Belt",
+            "purchase_amount_usd": 75,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 113,
+            "category": "Accessories",
+            "item_purchased": "Gloves",
+            "purchase_amount_usd": 65,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 121,
+            "category": "Accessories",
+            "item_purchased": "Hat",
+            "purchase_amount_usd": 84,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 135,
+            "category": "Accessories",
+            "item_purchased": "Hat",
+            "purchase_amount_usd": 94,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 146,
+            "category": "Accessories",
+            "item_purchased": "Jewelry",
+            "purchase_amount_usd": 95,
+            "category_average_purchase_amount_usd": 59.84
+          },
+          {
+            "customer_id": 149,
+            "category": "Accessories",
+            "item_purchased": "Gloves",
+            "purchase_amount_usd": 90,
+            "category_average_purchase_amount_usd": 59.84
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "customer_id",
+          "age",
+          "gender",
+          "item_purchased",
+          "category",
+          "purchase_amount_usd",
+          "location",
+          "size",
+          "color",
+          "season",
+          "review_rating",
+          "subscription_status",
+          "shipping_type",
+          "discount_applied",
+          "promo_code_used",
+          "previous_purchases",
+          "payment_method",
+          "frequency_of_purchases"
+        ],
+        "dtypes": {
+          "customer_id": "int64",
+          "age": "int64",
+          "gender": "object",
+          "item_purchased": "object",
+          "category": "object",
+          "purchase_amount_usd": "int64",
+          "location": "object",
+          "size": "object",
+          "color": "object",
+          "season": "object",
+          "review_rating": "float64",
+          "subscription_status": "object",
+          "shipping_type": "object",
+          "discount_applied": "object",
+          "promo_code_used": "object",
+          "previous_purchases": "int64",
+          "payment_method": "object",
+          "frequency_of_purchases": "object"
+        },
+        "rows": [
+          {
+            "customer_id": 29,
+            "age": 54,
+            "gender": "Male",
+            "item_purchased": "Handbag",
+            "category": "Accessories",
+            "purchase_amount_usd": 94,
+            "location": "North Carolina",
+            "size": "M",
+            "color": "Gray",
+            "season": "Fall",
+            "review_rating": 4.4,
+            "subscription_status": "Yes",
+            "shipping_type": "Free Shipping",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 41,
+            "payment_method": "PayPal",
+            "frequency_of_purchases": "Every 3 Months"
+          },
+          {
+            "customer_id": 41,
+            "age": 69,
+            "gender": "Male",
+            "item_purchased": "Handbag",
+            "category": "Accessories",
+            "purchase_amount_usd": 76,
+            "location": "Louisiana",
+            "size": "L",
+            "color": "Beige",
+            "season": "Winter",
+            "review_rating": 4.6,
+            "subscription_status": "Yes",
+            "shipping_type": "Next Day Air",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 31,
+            "payment_method": "Debit Card",
+            "frequency_of_purchases": "Quarterly"
+          },
+          {
+            "customer_id": 44,
+            "age": 25,
+            "gender": "Male",
+            "item_purchased": "Scarf",
+            "category": "Accessories",
+            "purchase_amount_usd": 69,
+            "location": "Ohio",
+            "size": "L",
+            "color": "Lavender",
+            "season": "Fall",
+            "review_rating": 3.7,
+            "subscription_status": "Yes",
+            "shipping_type": "Store Pickup",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 19,
+            "payment_method": "PayPal",
+            "frequency_of_purchases": "Fortnightly"
+          },
+          {
+            "customer_id": 57,
+            "age": 41,
+            "gender": "Male",
+            "item_purchased": "Backpack",
+            "category": "Accessories",
+            "purchase_amount_usd": 73,
+            "location": "Mississippi",
+            "size": "XL",
+            "color": "Brown",
+            "season": "Summer",
+            "review_rating": 4.7,
+            "subscription_status": "Yes",
+            "shipping_type": "Store Pickup",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 46,
+            "payment_method": "Credit Card",
+            "frequency_of_purchases": "Weekly"
+          },
+          {
+            "customer_id": 60,
+            "age": 63,
+            "gender": "Male",
+            "item_purchased": "Belt",
+            "category": "Accessories",
+            "purchase_amount_usd": 79,
+            "location": "Louisiana",
+            "size": "L",
+            "color": "Yellow",
+            "season": "Spring",
+            "review_rating": 4.6,
+            "subscription_status": "Yes",
+            "shipping_type": "Standard",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 4,
+            "payment_method": "Debit Card",
+            "frequency_of_purchases": "Weekly"
+          },
+          {
+            "customer_id": 62,
+            "age": 55,
+            "gender": "Male",
+            "item_purchased": "Scarf",
+            "category": "Accessories",
+            "purchase_amount_usd": 68,
+            "location": "Texas",
+            "size": "M",
+            "color": "Orange",
+            "season": "Winter",
+            "review_rating": 4.7,
+            "subscription_status": "Yes",
+            "shipping_type": "Store Pickup",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 21,
+            "payment_method": "Credit Card",
+            "frequency_of_purchases": "Every 3 Months"
+          },
+          {
+            "customer_id": 64,
+            "age": 33,
+            "gender": "Male",
+            "item_purchased": "Sunglasses",
+            "category": "Accessories",
+            "purchase_amount_usd": 79,
+            "location": "Arizona",
+            "size": "L",
+            "color": "Lavender",
+            "season": "Winter",
+            "review_rating": 2.7,
+            "subscription_status": "Yes",
+            "shipping_type": "2-Day Shipping",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 43,
+            "payment_method": "Credit Card",
+            "frequency_of_purchases": "Weekly"
+          },
+          {
+            "customer_id": 70,
+            "age": 48,
+            "gender": "Male",
+            "item_purchased": "Belt",
+            "category": "Accessories",
+            "purchase_amount_usd": 70,
+            "location": "Tennessee",
+            "size": "S",
+            "color": "Cyan",
+            "season": "Summer",
+            "review_rating": 4.4,
+            "subscription_status": "Yes",
+            "shipping_type": "Express",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 5,
+            "payment_method": "Cash",
+            "frequency_of_purchases": "Weekly"
+          },
+          {
+            "customer_id": 76,
+            "age": 64,
+            "gender": "Male",
+            "item_purchased": "Scarf",
+            "category": "Accessories",
+            "purchase_amount_usd": 85,
+            "location": "Utah",
+            "size": "M",
+            "color": "Blue",
+            "season": "Summer",
+            "review_rating": 2.7,
+            "subscription_status": "Yes",
+            "shipping_type": "Free Shipping",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 21,
+            "payment_method": "Credit Card",
+            "frequency_of_purchases": "Annually"
+          },
+          {
+            "customer_id": 86,
+            "age": 53,
+            "gender": "Male",
+            "item_purchased": "Sunglasses",
+            "category": "Accessories",
+            "purchase_amount_usd": 95,
+            "location": "New Mexico",
+            "size": "M",
+            "color": "Charcoal",
+            "season": "Winter",
+            "review_rating": 4.5,
+            "subscription_status": "Yes",
+            "shipping_type": "Next Day Air",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 2,
+            "payment_method": "Debit Card",
+            "frequency_of_purchases": "Bi-Weekly"
+          },
+          {
+            "customer_id": 92,
+            "age": 44,
+            "gender": "Male",
+            "item_purchased": "Scarf",
+            "category": "Accessories",
+            "purchase_amount_usd": 99,
+            "location": "South Carolina",
+            "size": "S",
+            "color": "Green",
+            "season": "Winter",
+            "review_rating": 4.6,
+            "subscription_status": "Yes",
+            "shipping_type": "Standard",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 18,
+            "payment_method": "Credit Card",
+            "frequency_of_purchases": "Every 3 Months"
+          },
+          {
+            "customer_id": 97,
+            "age": 32,
+            "gender": "Male",
+            "item_purchased": "Gloves",
+            "category": "Accessories",
+            "purchase_amount_usd": 73,
+            "location": "Delaware",
+            "size": "S",
+            "color": "Gold",
+            "season": "Spring",
+            "review_rating": null,
+            "subscription_status": "Yes",
+            "shipping_type": "Express",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 43,
+            "payment_method": "Venmo",
+            "frequency_of_purchases": "Every 3 Months"
+          },
+          {
+            "customer_id": 101,
+            "age": 62,
+            "gender": "Male",
+            "item_purchased": "Sunglasses",
+            "category": "Accessories",
+            "purchase_amount_usd": 98,
+            "location": "South Dakota",
+            "size": "M",
+            "color": "Maroon",
+            "season": "Fall",
+            "review_rating": 2.7,
+            "subscription_status": "Yes",
+            "shipping_type": "Express",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 31,
+            "payment_method": "Cash",
+            "frequency_of_purchases": "Fortnightly"
+          },
+          {
+            "customer_id": 106,
+            "age": 69,
+            "gender": "Male",
+            "item_purchased": "Backpack",
+            "category": "Accessories",
+            "purchase_amount_usd": 96,
+            "location": "New York",
+            "size": "M",
+            "color": "Charcoal",
+            "season": "Fall",
+            "review_rating": 3.6,
+            "subscription_status": "Yes",
+            "shipping_type": "Next Day Air",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 4,
+            "payment_method": "Bank Transfer",
+            "frequency_of_purchases": "Annually"
+          },
+          {
+            "customer_id": 112,
+            "age": 26,
+            "gender": "Male",
+            "item_purchased": "Belt",
+            "category": "Accessories",
+            "purchase_amount_usd": 75,
+            "location": "Massachusetts",
+            "size": "L",
+            "color": "Purple",
+            "season": "Summer",
+            "review_rating": 5.0,
+            "subscription_status": "Yes",
+            "shipping_type": "Free Shipping",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 9,
+            "payment_method": "Credit Card",
+            "frequency_of_purchases": "Annually"
+          },
+          {
+            "customer_id": 113,
+            "age": 37,
+            "gender": "Male",
+            "item_purchased": "Gloves",
+            "category": "Accessories",
+            "purchase_amount_usd": 65,
+            "location": "Florida",
+            "size": "M",
+            "color": "Red",
+            "season": "Spring",
+            "review_rating": 4.3,
+            "subscription_status": "Yes",
+            "shipping_type": "Free Shipping",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 28,
+            "payment_method": "PayPal",
+            "frequency_of_purchases": "Bi-Weekly"
+          },
+          {
+            "customer_id": 121,
+            "age": 64,
+            "gender": "Male",
+            "item_purchased": "Hat",
+            "category": "Accessories",
+            "purchase_amount_usd": 84,
+            "location": "West Virginia",
+            "size": "L",
+            "color": "Red",
+            "season": "Summer",
+            "review_rating": 4.0,
+            "subscription_status": "Yes",
+            "shipping_type": "Express",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 32,
+            "payment_method": "Bank Transfer",
+            "frequency_of_purchases": "Annually"
+          },
+          {
+            "customer_id": 135,
+            "age": 43,
+            "gender": "Male",
+            "item_purchased": "Hat",
+            "category": "Accessories",
+            "purchase_amount_usd": 94,
+            "location": "Texas",
+            "size": "L",
+            "color": "Gray",
+            "season": "Fall",
+            "review_rating": 4.9,
+            "subscription_status": "Yes",
+            "shipping_type": "Store Pickup",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 25,
+            "payment_method": "Cash",
+            "frequency_of_purchases": "Monthly"
+          },
+          {
+            "customer_id": 146,
+            "age": 24,
+            "gender": "Male",
+            "item_purchased": "Jewelry",
+            "category": "Accessories",
+            "purchase_amount_usd": 95,
+            "location": "Missouri",
+            "size": "M",
+            "color": "Teal",
+            "season": "Fall",
+            "review_rating": 4.5,
+            "subscription_status": "Yes",
+            "shipping_type": "Standard",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 44,
+            "payment_method": "Debit Card",
+            "frequency_of_purchases": "Quarterly"
+          },
+          {
+            "customer_id": 149,
+            "age": 37,
+            "gender": "Male",
+            "item_purchased": "Gloves",
+            "category": "Accessories",
+            "purchase_amount_usd": 90,
+            "location": "Wyoming",
+            "size": "M",
+            "color": "Gray",
+            "season": "Fall",
+            "review_rating": 2.6,
+            "subscription_status": "Yes",
+            "shipping_type": "Store Pickup",
+            "discount_applied": "Yes",
+            "promo_code_used": "Yes",
+            "previous_purchases": 47,
+            "payment_method": "Debit Card",
+            "frequency_of_purchases": "Annually"
+          }
+        ]
+      },
+      "failure_reason": "column_count_mismatch: actual=18, expected=5"
+    },
+    {
+      "id": "ws04",
+      "run": 1,
+      "answerable": true,
+      "correct": true,
+      "outcome": "matched",
+      "generated_sql": "SELECT\n    \"location\",\n    SUM(\"purchase_amount_usd\") AS \"total_purchase_amount\",\n    ROW_NUMBER() OVER (ORDER BY SUM(\"purchase_amount_usd\") DESC, \"location\" ASC) AS \"rank\"\nFROM \"dataset\"\nGROUP BY \"location\"\nORDER BY \"total_purchase_amount\" DESC, \"location\" ASC",
+      "expected_result": {
+        "columns": [
+          "location",
+          "total_purchase_amount_usd",
+          "revenue_rank"
+        ],
+        "dtypes": {
+          "location": "object",
+          "total_purchase_amount_usd": "float64",
+          "revenue_rank": "int64"
+        },
+        "rows": [
+          {
+            "location": "Montana",
+            "total_purchase_amount_usd": 5784.0,
+            "revenue_rank": 1
+          },
+          {
+            "location": "Illinois",
+            "total_purchase_amount_usd": 5617.0,
+            "revenue_rank": 2
+          },
+          {
+            "location": "California",
+            "total_purchase_amount_usd": 5605.0,
+            "revenue_rank": 3
+          },
+          {
+            "location": "Idaho",
+            "total_purchase_amount_usd": 5587.0,
+            "revenue_rank": 4
+          },
+          {
+            "location": "Nevada",
+            "total_purchase_amount_usd": 5514.0,
+            "revenue_rank": 5
+          },
+          {
+            "location": "Alabama",
+            "total_purchase_amount_usd": 5261.0,
+            "revenue_rank": 6
+          },
+          {
+            "location": "New York",
+            "total_purchase_amount_usd": 5257.0,
+            "revenue_rank": 7
+          },
+          {
+            "location": "North Dakota",
+            "total_purchase_amount_usd": 5220.0,
+            "revenue_rank": 8
+          },
+          {
+            "location": "West Virginia",
+            "total_purchase_amount_usd": 5174.0,
+            "revenue_rank": 9
+          },
+          {
+            "location": "Nebraska",
+            "total_purchase_amount_usd": 5172.0,
+            "revenue_rank": 10
+          },
+          {
+            "location": "New Mexico",
+            "total_purchase_amount_usd": 5014.0,
+            "revenue_rank": 11
+          },
+          {
+            "location": "Minnesota",
+            "total_purchase_amount_usd": 4977.0,
+            "revenue_rank": 12
+          },
+          {
+            "location": "Pennsylvania",
+            "total_purchase_amount_usd": 4926.0,
+            "revenue_rank": 13
+          },
+          {
+            "location": "Mississippi",
+            "total_purchase_amount_usd": 4883.0,
+            "revenue_rank": 14
+          },
+          {
+            "location": "Alaska",
+            "total_purchase_amount_usd": 4867.0,
+            "revenue_rank": 15
+          },
+          {
+            "location": "Vermont",
+            "total_purchase_amount_usd": 4860.0,
+            "revenue_rank": 16
+          },
+          {
+            "location": "Louisiana",
+            "total_purchase_amount_usd": 4848.0,
+            "revenue_rank": 17
+          },
+          {
+            "location": "Virginia",
+            "total_purchase_amount_usd": 4842.0,
+            "revenue_rank": 18
+          },
+          {
+            "location": "Arkansas",
+            "total_purchase_amount_usd": 4828.0,
+            "revenue_rank": 19
+          },
+          {
+            "location": "Maryland",
+            "total_purchase_amount_usd": 4795.0,
+            "revenue_rank": 20
+          },
+          {
+            "location": "Tennessee",
+            "total_purchase_amount_usd": 4772.0,
+            "revenue_rank": 21
+          },
+          {
+            "location": "Delaware",
+            "total_purchase_amount_usd": 4758.0,
+            "revenue_rank": 22
+          },
+          {
+            "location": "North Carolina",
+            "total_purchase_amount_usd": 4742.0,
+            "revenue_rank": 23
+          },
+          {
+            "location": "Texas",
+            "total_purchase_amount_usd": 4712.0,
+            "revenue_rank": 24
+          },
+          {
+            "location": "Missouri",
+            "total_purchase_amount_usd": 4691.0,
+            "revenue_rank": 25
+          },
+          {
+            "location": "Indiana",
+            "total_purchase_amount_usd": 4655.0,
+            "revenue_rank": 26
+          },
+          {
+            "location": "Ohio",
+            "total_purchase_amount_usd": 4649.0,
+            "revenue_rank": 27
+          },
+          {
+            "location": "Georgia",
+            "total_purchase_amount_usd": 4645.0,
+            "revenue_rank": 28
+          },
+          {
+            "location": "Washington",
+            "total_purchase_amount_usd": 4623.0,
+            "revenue_rank": 29
+          },
+          {
+            "location": "Michigan",
+            "total_purchase_amount_usd": 4533.0,
+            "revenue_rank": 30
+          },
+          {
+            "location": "Utah",
+            "total_purchase_amount_usd": 4443.0,
+            "revenue_rank": 31
+          },
+          {
+            "location": "South Carolina",
+            "total_purchase_amount_usd": 4439.0,
+            "revenue_rank": 32
+          },
+          {
+            "location": "Kentucky",
+            "total_purchase_amount_usd": 4402.0,
+            "revenue_rank": 33
+          },
+          {
+            "location": "Maine",
+            "total_purchase_amount_usd": 4388.0,
+            "revenue_rank": 34
+          },
+          {
+            "location": "Massachusetts",
+            "total_purchase_amount_usd": 4384.0,
+            "revenue_rank": 35
+          },
+          {
+            "location": "Oklahoma",
+            "total_purchase_amount_usd": 4376.0,
+            "revenue_rank": 36
+          },
+          {
+            "location": "Arizona",
+            "total_purchase_amount_usd": 4326.0,
+            "revenue_rank": 37
+          },
+          {
+            "location": "Wyoming",
+            "total_purchase_amount_usd": 4309.0,
+            "revenue_rank": 38
+          },
+          {
+            "location": "Oregon",
+            "total_purchase_amount_usd": 4243.0,
+            "revenue_rank": 39
+          },
+          {
+            "location": "South Dakota",
+            "total_purchase_amount_usd": 4236.0,
+            "revenue_rank": 40
+          },
+          {
+            "location": "Connecticut",
+            "total_purchase_amount_usd": 4226.0,
+            "revenue_rank": 41
+          },
+          {
+            "location": "Colorado",
+            "total_purchase_amount_usd": 4222.0,
+            "revenue_rank": 42
+          },
+          {
+            "location": "New Hampshire",
+            "total_purchase_amount_usd": 4219.0,
+            "revenue_rank": 43
+          },
+          {
+            "location": "Iowa",
+            "total_purchase_amount_usd": 4201.0,
+            "revenue_rank": 44
+          },
+          {
+            "location": "Wisconsin",
+            "total_purchase_amount_usd": 4196.0,
+            "revenue_rank": 45
+          },
+          {
+            "location": "Rhode Island",
+            "total_purchase_amount_usd": 3871.0,
+            "revenue_rank": 46
+          },
+          {
+            "location": "New Jersey",
+            "total_purchase_amount_usd": 3802.0,
+            "revenue_rank": 47
+          },
+          {
+            "location": "Florida",
+            "total_purchase_amount_usd": 3798.0,
+            "revenue_rank": 48
+          },
+          {
+            "location": "Hawaii",
+            "total_purchase_amount_usd": 3752.0,
+            "revenue_rank": 49
+          },
+          {
+            "location": "Kansas",
+            "total_purchase_amount_usd": 3437.0,
+            "revenue_rank": 50
+          }
+        ]
+      },
+      "actual_result": {
+        "columns": [
+          "location",
+          "total_purchase_amount",
+          "rank"
+        ],
+        "dtypes": {
+          "location": "object",
+          "total_purchase_amount": "float64",
+          "rank": "int64"
+        },
+        "rows": [
+          {
+            "location": "Montana",
+            "total_purchase_amount": 5784.0,
+            "rank": 1
+          },
+          {
+            "location": "Illinois",
+            "total_purchase_amount": 5617.0,
+            "rank": 2
+          },
+          {
+            "location": "California",
+            "total_purchase_amount": 5605.0,
+            "rank": 3
+          },
+          {
+            "location": "Idaho",
+            "total_purchase_amount": 5587.0,
+            "rank": 4
+          },
+          {
+            "location": "Nevada",
+            "total_purchase_amount": 5514.0,
+            "rank": 5
+          },
+          {
+            "location": "Alabama",
+            "total_purchase_amount": 5261.0,
+            "rank": 6
+          },
+          {
+            "location": "New York",
+            "total_purchase_amount": 5257.0,
+            "rank": 7
+          },
+          {
+            "location": "North Dakota",
+            "total_purchase_amount": 5220.0,
+            "rank": 8
+          },
+          {
+            "location": "West Virginia",
+            "total_purchase_amount": 5174.0,
+            "rank": 9
+          },
+          {
+            "location": "Nebraska",
+            "total_purchase_amount": 5172.0,
+            "rank": 10
+          },
+          {
+            "location": "New Mexico",
+            "total_purchase_amount": 5014.0,
+            "rank": 11
+          },
+          {
+            "location": "Minnesota",
+            "total_purchase_amount": 4977.0,
+            "rank": 12
+          },
+          {
+            "location": "Pennsylvania",
+            "total_purchase_amount": 4926.0,
+            "rank": 13
+          },
+          {
+            "location": "Mississippi",
+            "total_purchase_amount": 4883.0,
+            "rank": 14
+          },
+          {
+            "location": "Alaska",
+            "total_purchase_amount": 4867.0,
+            "rank": 15
+          },
+          {
+            "location": "Vermont",
+            "total_purchase_amount": 4860.0,
+            "rank": 16
+          },
+          {
+            "location": "Louisiana",
+            "total_purchase_amount": 4848.0,
+            "rank": 17
+          },
+          {
+            "location": "Virginia",
+            "total_purchase_amount": 4842.0,
+            "rank": 18
+          },
+          {
+            "location": "Arkansas",
+            "total_purchase_amount": 4828.0,
+            "rank": 19
+          },
+          {
+            "location": "Maryland",
+            "total_purchase_amount": 4795.0,
+            "rank": 20
+          },
+          {
+            "location": "Tennessee",
+            "total_purchase_amount": 4772.0,
+            "rank": 21
+          },
+          {
+            "location": "Delaware",
+            "total_purchase_amount": 4758.0,
+            "rank": 22
+          },
+          {
+            "location": "North Carolina",
+            "total_purchase_amount": 4742.0,
+            "rank": 23
+          },
+          {
+            "location": "Texas",
+            "total_purchase_amount": 4712.0,
+            "rank": 24
+          },
+          {
+            "location": "Missouri",
+            "total_purchase_amount": 4691.0,
+            "rank": 25
+          },
+          {
+            "location": "Indiana",
+            "total_purchase_amount": 4655.0,
+            "rank": 26
+          },
+          {
+            "location": "Ohio",
+            "total_purchase_amount": 4649.0,
+            "rank": 27
+          },
+          {
+            "location": "Georgia",
+            "total_purchase_amount": 4645.0,
+            "rank": 28
+          },
+          {
+            "location": "Washington",
+            "total_purchase_amount": 4623.0,
+            "rank": 29
+          },
+          {
+            "location": "Michigan",
+            "total_purchase_amount": 4533.0,
+            "rank": 30
+          },
+          {
+            "location": "Utah",
+            "total_purchase_amount": 4443.0,
+            "rank": 31
+          },
+          {
+            "location": "South Carolina",
+            "total_purchase_amount": 4439.0,
+            "rank": 32
+          },
+          {
+            "location": "Kentucky",
+            "total_purchase_amount": 4402.0,
+            "rank": 33
+          },
+          {
+            "location": "Maine",
+            "total_purchase_amount": 4388.0,
+            "rank": 34
+          },
+          {
+            "location": "Massachusetts",
+            "total_purchase_amount": 4384.0,
+            "rank": 35
+          },
+          {
+            "location": "Oklahoma",
+            "total_purchase_amount": 4376.0,
+            "rank": 36
+          },
+          {
+            "location": "Arizona",
+            "total_purchase_amount": 4326.0,
+            "rank": 37
+          },
+          {
+            "location": "Wyoming",
+            "total_purchase_amount": 4309.0,
+            "rank": 38
+          },
+          {
+            "location": "Oregon",
+            "total_purchase_amount": 4243.0,
+            "rank": 39
+          },
+          {
+            "location": "South Dakota",
+            "total_purchase_amount": 4236.0,
+            "rank": 40
+          },
+          {
+            "location": "Connecticut",
+            "total_purchase_amount": 4226.0,
+            "rank": 41
+          },
+          {
+            "location": "Colorado",
+            "total_purchase_amount": 4222.0,
+            "rank": 42
+          },
+          {
+            "location": "New Hampshire",
+            "total_purchase_amount": 4219.0,
+            "rank": 43
+          },
+          {
+            "location": "Iowa",
+            "total_purchase_amount": 4201.0,
+            "rank": 44
+          },
+          {
+            "location": "Wisconsin",
+            "total_purchase_amount": 4196.0,
+            "rank": 45
+          },
+          {
+            "location": "Rhode Island",
+            "total_purchase_amount": 3871.0,
+            "rank": 46
+          },
+          {
+            "location": "New Jersey",
+            "total_purchase_amount": 3802.0,
+            "rank": 47
+          },
+          {
+            "location": "Florida",
+            "total_purchase_amount": 3798.0,
+            "rank": 48
+          },
+          {
+            "location": "Hawaii",
+            "total_purchase_amount": 3752.0,
+            "rank": 49
+          },
+          {
+            "location": "Kansas",
+            "total_purchase_amount": 3437.0,
+            "rank": 50
+          }
+        ]
+      },
+      "failure_reason": null
+    },
+    {
+      "id": "ua01",
+      "run": 1,
+      "answerable": false,
+      "correct": true,
+      "outcome": "agent_refused: The active dataset does not contain the data needed for: date or time.",
+      "generated_sql": null,
+      "expected_result": null,
+      "actual_result": null,
+      "failure_reason": "The active dataset does not contain the data needed for: date or time."
+    },
+    {
+      "id": "ua02",
+      "run": 1,
+      "answerable": false,
+      "correct": true,
+      "outcome": "agent_refused: The active dataset does not contain the data needed for: profit, margin, or cost.",
+      "generated_sql": null,
+      "expected_result": null,
+      "actual_result": null,
+      "failure_reason": "The active dataset does not contain the data needed for: profit, margin, or cost."
+    },
+    {
+      "id": "ua03",
+      "run": 1,
+      "answerable": false,
+      "correct": true,
+      "outcome": "agent_refused: The active dataset does not contain the data needed for: return or refund, customer name.",
+      "generated_sql": null,
+      "expected_result": null,
+      "actual_result": null,
+      "failure_reason": "The active dataset does not contain the data needed for: return or refund, customer name."
+    },
+    {
+      "id": "ua04",
+      "run": 1,
+      "answerable": false,
+      "correct": true,
+      "outcome": "agent_refused: The active dataset does not contain the data needed for: delivery date or time.",
+      "generated_sql": null,
+      "expected_result": null,
+      "actual_result": null,
+      "failure_reason": "The active dataset does not contain the data needed for: delivery date or time."
+    }
+  ],
+  "measurement_type": "offline re-comparison of saved live output; no new model requests",
+  "source_report": "evals\\accuracy_results_dev_verification.json",
+  "question_contracts": "clarified output columns; removed unrequested ws04 top-10 limit"
+}

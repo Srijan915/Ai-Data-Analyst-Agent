@@ -1,1 +1,1 @@
-"""AI Data Analyst Agent — application package."""
+"""QueryPilotAI application package."""

@@ -35,7 +35,7 @@ def test_correct_access_code_unlocks_the_main_application(monkeypatch) -> None:
     app.button[0].click().run(timeout=15)
 
     assert not app.exception
-    assert app.title[0].value == "📊 AI Data Analyst Agent"
+    assert app.title[0].value == "QueryPilotAI"
     assert len(app.text_area) == 0
 
 def test_production_without_password_stays_locked(monkeypatch):

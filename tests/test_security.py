@@ -108,6 +108,69 @@ def test_validate_sql_allows_cte():
 
 
 # ===========================================================================
+# Window function regression tests
+# ===========================================================================
+
+def test_validate_sql_allows_row_number_window_function():
+    result = validate_sql(
+        "SELECT id, ROW_NUMBER() OVER () AS rn FROM orders",
+        allowed_tables=ORDERS,
+    )
+
+    assert result.is_valid is True
+    assert result.cleaned_sql is not None
+    assert "ROW_NUMBER()" in result.cleaned_sql.upper()
+
+
+def test_validate_sql_allows_row_number_with_partition_and_order():
+    result = validate_sql(
+        "SELECT id, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY id DESC) AS rn FROM orders",
+        allowed_tables=ORDERS,
+    )
+
+    assert result.is_valid is True
+    assert result.cleaned_sql is not None
+
+
+def test_validate_sql_allows_row_number_in_cte():
+    result = validate_sql(
+        "WITH ranked AS ("
+        "SELECT id, ROW_NUMBER() OVER (ORDER BY id) AS rn FROM orders"
+        ") SELECT id FROM ranked WHERE rn = 1",
+        allowed_tables=ORDERS,
+    )
+
+    assert result.is_valid is True
+    assert result.cleaned_sql is not None
+
+
+def test_validate_sql_blocks_unsafe_operations_with_row_number():
+    # Attempting to sneak DROP TABLE after a valid ROW_NUMBER() query
+    stacked = validate_sql(
+        "SELECT id, ROW_NUMBER() OVER () AS rn FROM orders; DROP TABLE orders",
+        allowed_tables=ORDERS,
+    )
+    assert stacked.is_valid is False
+    assert stacked.errors[0].code == "MULTIPLE_STATEMENTS"
+
+    # Attempting to call disallowed function alongside ROW_NUMBER()
+    disallowed_func = validate_sql(
+        "SELECT ROW_NUMBER() OVER () AS rn, RANDOM() FROM orders",
+        allowed_tables=ORDERS,
+    )
+    assert disallowed_func.is_valid is False
+    assert disallowed_func.errors[0].code == "DISALLOWED_FUNCTION"
+
+    # Attempting file read table-valued function with ROW_NUMBER()
+    file_access = validate_sql(
+        "SELECT ROW_NUMBER() OVER () AS rn FROM read_csv('secret.csv')",
+        allowed_tables=ORDERS,
+    )
+    assert file_access.is_valid is False
+    assert file_access.errors[0].code in ("DISALLOWED_FUNCTION", "DISALLOWED_TABLE_REFERENCE")
+
+
+# ===========================================================================
 # CASE expression regression tests
 # ===========================================================================
 

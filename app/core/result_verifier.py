@@ -64,7 +64,13 @@ def explanation_is_grounded(explanation: str, result: QueryResult) -> bool:
             _register_number(str(value))
         elif isinstance(value, str):
             cleaned_str = re.sub(r"(?<=\d),(?=\d)", "", value)
-            for embedded in re.findall(r"[-+]?\d+(?:\.\d+)?", cleaned_str):
+            # A hyphen following an identifier is a separator, not a minus
+            # sign (for example ``batch-12`` supports the claim ``12``).
+            # Keep a leading sign for genuine standalone negative values.
+            for embedded in re.findall(
+                r"(?<![A-Za-z0-9_])[-+]?\d+(?:\.\d+)?",
+                cleaned_str,
+            ):
                 _register_number(embedded)
 
     # Strip structural list numbering / markdown headers (e.g. "1. ", "2) ", "### 1. ")

@@ -1,0 +1,328 @@
+{
+  "seed": 42,
+  "source_rows": 3900,
+  "duplicate_indices": [
+    3900,
+    3901,
+    3902,
+    3903,
+    3904,
+    3905,
+    3906,
+    3907,
+    3908,
+    3909,
+    3910,
+    3911,
+    3912,
+    3913,
+    3914,
+    3915,
+    3916,
+    3917,
+    3918,
+    3919,
+    3920,
+    3921,
+    3922,
+    3923,
+    3924,
+    3925,
+    3926,
+    3927,
+    3928,
+    3929
+  ],
+  "whitespace_cells": [
+    {
+      "row": 2745,
+      "column": " Category $ ",
+      "expected": "Footwear"
+    },
+    {
+      "row": 1093,
+      "column": " Category $ ",
+      "expected": "Footwear"
+    },
+    {
+      "row": 2874,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 3836,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2799,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2654,
+      "column": " Category $ ",
+      "expected": "Outerwear"
+    },
+    {
+      "row": 292,
+      "column": " Category $ ",
+      "expected": "Footwear"
+    },
+    {
+      "row": 2495,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 2600,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 700,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2187,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2986,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 1002,
+      "column": " Category $ ",
+      "expected": "Footwear"
+    },
+    {
+      "row": 669,
+      "column": " Category $ ",
+      "expected": "Outerwear"
+    },
+    {
+      "row": 1893,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 1554,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 1105,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 3790,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 2621,
+      "column": " Category $ ",
+      "expected": "Footwear"
+    },
+    {
+      "row": 2818,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2281,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 899,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2804,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 1328,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 3452,
+      "column": " Category $ ",
+      "expected": "Outerwear"
+    },
+    {
+      "row": 3147,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 3178,
+      "column": " Category $ ",
+      "expected": "Footwear"
+    },
+    {
+      "row": 229,
+      "column": " Category $ ",
+      "expected": "Footwear"
+    },
+    {
+      "row": 938,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 3366,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 131,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 3297,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 1292,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 1643,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 1096,
+      "column": " Category $ ",
+      "expected": "Outerwear"
+    },
+    {
+      "row": 271,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 864,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 3740,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 3862,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2323,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 3589,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 2940,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 1288,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 870,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2684,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2044,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 1620,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 3623,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    },
+    {
+      "row": 3745,
+      "column": " Category $ ",
+      "expected": "Clothing"
+    },
+    {
+      "row": 2633,
+      "column": " Category $ ",
+      "expected": "Accessories"
+    }
+  ],
+  "messy_columns": {
+    "Category": " Category $ ",
+    "Gender": "GENDER"
+  },
+  "leading_zero_indices": [
+    1879,
+    585,
+    1084,
+    571,
+    1010,
+    3051,
+    2299,
+    2207,
+    1076,
+    3059,
+    2394,
+    1754,
+    3677,
+    2390,
+    1635,
+    1482,
+    898,
+    566,
+    2087,
+    2021
+  ],
+  "convertible_columns": [
+    "Age",
+    "Purchase Amount (USD)",
+    "Review Rating",
+    "Previous Purchases"
+  ],
+  "selected_operations": [
+    "Remove duplicates",
+    "Handle missing values",
+    "Correct data types",
+    "Standardize text values",
+    "Clean column names"
+  ],
+  "dataset_rows": 3930
+}
