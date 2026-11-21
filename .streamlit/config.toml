@@ -1,21 +1,24 @@
 [theme]
 base = "dark"
 primaryColor = "#38BDF8"
-backgroundColor = "#0B1220"
-secondaryBackgroundColor = "#111C2E"
-textColor = "#E5EEF8"
+backgroundColor = "#0A1020"
+secondaryBackgroundColor = "#101A2E"
+textColor = "#E8EEF8"
 linkColor = "#7DD3FC"
-borderColor = "#26364A"
-dataframeHeaderBackgroundColor = "#1E3047"
+borderColor = "#2A3A55"
+dataframeHeaderBackgroundColor = "#1D2D49"
 blueColor = "#38BDF8"
 blueTextColor = "#7DD3FC"
-greenColor = "#34D399"
-greenTextColor = "#34D399"
+greenColor = "#2DD4BF"
+greenTextColor = "#2DD4BF"
 yellowColor = "#FBBF24"
 yellowTextColor = "#FBBF24"
 redColor = "#FB7185"
 redTextColor = "#FB7185"
 font = "sans serif"
+
+[client]
+toolbarMode = "minimal"
 
 [server]
 maxUploadSize = 100
