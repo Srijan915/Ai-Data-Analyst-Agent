@@ -204,29 +204,14 @@ def _download_results(dataframe):
 
 
 def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = None) -> None:
-    """
-    Render analysis result area in priority order:
-    1. Answer card
-    2. Result table
-    3. Chart
-    4. Collapsible SQL
-    """
+    """Render the latest grounded result in three compact cards."""
     if result is None:
+        columns = st.columns(3)
+        for column, title in zip(columns, ("Query result", "Chart", "Key insights")):
+            with column, st.container(border=True):
+                st.subheader(title)
+                st.caption("Ask a question to see results.")
         return
-
-    st.html(
-        """
-        <div class="result-header-bar">
-            <div class="section-label">
-                ANALYSIS RESULT
-            </div>
-            <div class="result-badge">
-                Query complete
-            </div>
-        </div>
-        """
-    )
-
     state_type, icon, sentence = _determine_result_state(result)
     st.html(
         f"""
@@ -239,36 +224,10 @@ def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = No
 
     for warning in getattr(result, "warnings", []):
         st.warning(f"⚠️ {warning}")
-
-    # 1. Answer card
-    with st.container(border=True):
-        st.html(
-            """
-            <div class="card-header-badge ai-badge">
-                <span class="badge-icon">✦</span>
-                <span>AI EXECUTIVE INSIGHT</span>
-            </div>
-            """
-        )
-        st.subheader("Key insight")
-        if getattr(result, "explanation", None):
-            st.markdown(result.explanation)
-        else:
-            st.caption("No explanation was generated for this result.")
-
-    # 2. Result table
-    with st.container(border=True):
-        st.html(
-            """
-            <div class="card-header-badge table-badge">
-                <span class="badge-icon">📋</span>
-                <span>STRUCTURED QUERY RESULT</span>
-            </div>
-            """
-        )
+    table_col, chart_col, insight_col = st.columns(3, gap="medium")
+    query_result = getattr(result, "query_result", None)
+    with table_col, st.container(border=True):
         st.subheader("Query result")
-
-        query_result = getattr(result, "query_result", None)
         if query_result is not None and getattr(query_result, "dataframe", None) is not None:
             df = query_result.dataframe
             if getattr(query_result, "truncated", False):
@@ -292,31 +251,33 @@ def display_analysis_result(result: Any, chart_renderer: Optional[Callable] = No
             _download_results(df)
         else:
             st.caption("No tabular result is available for this question.")
-
-    # 3. Chart
     chart_spec = getattr(result, "chart", None)
-    if chart_renderer is not None and (chart_spec is not None or getattr(result, "query_result", None) is not None):
-        with st.container(border=True):
-            st.html(
-                """
-                <div class="card-header-badge chart-badge">
-                    <span class="badge-icon">📊</span>
-                    <span>VISUALIZATION ENGINE</span>
-                </div>
-                """
-            )
-            st.subheader("Visualization")
+    with chart_col, st.container(border=True):
+        st.subheader("Chart")
+        if chart_renderer is not None and (chart_spec is not None or query_result is not None):
             try:
-                chart_renderer(chart_spec, query_result=getattr(result, "query_result", None))
+                chart_renderer(chart_spec, query_result=query_result)
             except Exception:
                 logger.exception("Failed to render chart")
                 st.warning("Chart could not be rendered")
-
-    # 4. Collapsible SQL
+        else:
+            st.caption("No chart is available for this result.")
+    with insight_col, st.container(border=True):
+        st.subheader("Key insights")
+        explanation = getattr(result, "explanation", None)
+        if explanation:
+            parts = [part.strip() for part in explanation.split(";") if part.strip()]
+            st.markdown("\n".join(f"- {part}" for part in parts[:3]))
+            if len(parts) > 3:
+                st.markdown("- " + "; ".join(parts[3:]))
+        else:
+            st.caption("No explanation was generated for this result.")
     validation = getattr(result, "validation", None)
     executed_sql = getattr(validation, "cleaned_sql", None)
     sql_text = executed_sql if isinstance(executed_sql, str) and executed_sql else getattr(result, "sql", None)
     if sql_text:
         with st.expander("Generated SQL", expanded=False):
+            if validation is not None and validation.is_valid and executed_sql:
+                st.html('<span class="validated-tag">Validated: read-only</span>')
             st.caption("Validated SQL sent to DuckDB, including any enforced row limit.")
             st.code(sql_text, language="sql")

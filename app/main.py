@@ -237,6 +237,8 @@ def _initialize_session_state() -> None:
 
     if "conversation_history" not in st.session_state:
         st.session_state.conversation_history = []
+    if "queries_run" not in st.session_state:
+        st.session_state.queries_run = 0
 
     if "pending_query" not in st.session_state:
         st.session_state.pending_query = None
@@ -1414,6 +1416,15 @@ def _render_dataset_workspace() -> None:
         ),
     )
 
+    if st.button("Load sample dataset", use_container_width=True):
+        sample_path = PROJECT_ROOT / "data" / "sample" / "customer_shopping_behavior.csv"
+        sample = BytesIO(sample_path.read_bytes())
+        sample.name, sample.size, sample.file_id = sample_path.name, len(sample.getbuffer()), "sample"
+        _load_uploaded_file(sample, _uploaded_file_signature(sample))
+        if not st.session_state.upload_error:
+            st.session_state.uploader_key_version += 1
+            st.rerun()
+
     # Streamlit returns a list for multi-file mode. Tests and older
     # adapters may return one UploadedFile, so normalize both.
     uploaded_files = uploaded_file if isinstance(uploaded_file, list) else ([uploaded_file] if uploaded_file is not None else [])
@@ -1457,14 +1468,16 @@ def _render_dataset_workspace() -> None:
         st.session_state.failed_upload_signature = None
 
     status_label, status_modifier, _ = _workspace_status()
-    filename = html.escape(
-        str(st.session_state.uploaded_filename or "No dataset loaded")
-    )
+    profile = st.session_state.dataset_profile
+    filename = html.escape(str(st.session_state.uploaded_filename or "No dataset loaded"))
+    if profile is not None:
+        filename += f" · {profile.row_count:,} rows · {profile.column_count:,} columns"
+    status_text = filename if status_label == "No dataset" else f"{status_label} · {filename}"
     st.html(
         f"""
         <div class="sidebar-status {status_modifier}">
             <span class="sidebar-status-dot"></span>
-            <span>{status_label} · {filename}</span>
+            <span>{status_text}</span>
         </div>
         """
     )
@@ -1505,7 +1518,15 @@ def main() -> None:
     if not _render_public_demo_access_gate():
         return
 
-    st.title(config.app_name)
+    title_col, reset_col = st.columns([5, 1], vertical_alignment="center")
+    with title_col:
+        st.title(config.app_name)
+    with reset_col:
+        if st.button("Reset", use_container_width=True):
+            st.session_state.last_result = None
+            st.session_state.pending_query = None
+            st.session_state.query_input_composer = ""
+            st.rerun()
     st.caption("Explore uploaded data, verify relationships, and turn questions into validated SQL insights.")
     st.html('<div id="your-data"></div>')
     with st.container(border=True):
@@ -1585,6 +1606,19 @@ def main() -> None:
         return
 
     _display_dataset_overview()
+
+    profile = st.session_state.dataset_profile
+    total_cells = profile.row_count * profile.column_count
+    missing = sum(column.null_count for column in profile.columns)
+    with st.container(key="kpi_row"):
+        kpi_cols = st.columns(4)
+        for column, label, value in zip(kpi_cols,
+                ("Rows", "Columns", "Missing values %", "Queries run this session"),
+                (f"{profile.row_count:,}", f"{profile.column_count:,}",
+                 f"{missing / total_cells * 100:.1f}%" if total_cells else "0.0%",
+                 f"{st.session_state.queries_run:,}")):
+            with column:
+                st.metric(label, value)
 
     # ----------------------------------------------------------------------
     # Natural-language question
@@ -1672,6 +1706,7 @@ def main() -> None:
                 chart_type=selected_chart_type,
             )
             if len(st.session_state.conversation_history) > previous_history:
+                st.session_state.queries_run += 1
                 st.rerun()
 
     # ----------------------------------------------------------------------
