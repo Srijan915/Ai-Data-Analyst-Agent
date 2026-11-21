@@ -269,7 +269,7 @@ def _render_public_demo_access_gate() -> bool:
         </div>
         """
     )
-    st.title("Private Portfolio Demo")
+    st.title("QueryPilotAI Private Demo")
     st.caption(
         "This demo is access-controlled to protect the AI service quota "
         "used for analysis."
@@ -591,6 +591,11 @@ def _catalog_from_parts(tables):
 def _activate_format_files(catalog, documents, signature, failures, notices):
     records = catalog.profile.datasets if catalog is not None else []
     first = records[0] if records else None
+    # A worksheet change can retire the dataset selected by the catalog widget.
+    if first and st.session_state.get("catalog_selected_dataset") not in {
+        record.dataset_id for record in records
+    }:
+        st.session_state.catalog_selected_dataset = first.dataset_id
     frame = pd.DataFrame(first.profile.sample_rows, columns=first.profile.column_names) if first else None
     agent = DataAnalystAgent(dataframe=frame, dataset_profile=catalog.profile,
                              max_result_rows=config.max_query_result_rows,
@@ -1661,11 +1666,13 @@ def main() -> None:
             )
 
         else:
-
+            previous_history = len(st.session_state.conversation_history)
             _run_analysis(
                 question=question.strip(),
                 chart_type=selected_chart_type,
             )
+            if len(st.session_state.conversation_history) > previous_history:
+                st.rerun()
 
     # ----------------------------------------------------------------------
     # Latest result

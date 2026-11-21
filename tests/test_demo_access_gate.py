@@ -18,7 +18,7 @@ def test_configured_access_code_blocks_the_main_application(monkeypatch) -> None
     app.run(timeout=15)
 
     assert not app.exception
-    assert app.title[0].value == "🔒 Private Portfolio Demo"
+    assert app.title[0].value == "QueryPilotAI Private Demo"
     assert len(app.text_input) == 1
     assert len(app.button) == 1
     assert len(app.text_area) == 0
