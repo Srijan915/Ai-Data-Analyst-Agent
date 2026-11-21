@@ -10,7 +10,7 @@ plotly==6.3.0
 python-dotenv==1.2.2
 truststore==0.10.5
 pydantic==2.12.5
-sqlglot==27.14.0
+sqlglot==30.33.0
 pytest==9.0.3
 pytest-cov==7.1.0
 fastapi>=0.115.0
