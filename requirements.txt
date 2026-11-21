@@ -11,7 +11,7 @@ python-dotenv==1.2.2
 truststore==0.10.5
 pydantic==2.12.5
 sqlglot==27.14.0
-pytest==9.0.3
+pytest==9.2.0
 pytest-cov==7.1.0
 fastapi>=0.115.0
 uvicorn>=0.30.0
