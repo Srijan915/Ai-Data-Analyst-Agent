@@ -1,0 +1,211 @@
+sa01: What are the number of customer records and total purchase amount in USD?
+ customer_records  total_purchase_amount_usd
+             3900                   233081.0
+sa02: What are the average, minimum, and maximum purchase amounts in USD?
+ average_purchase_amount_usd  minimum_purchase_amount_usd  maximum_purchase_amount_usd
+                       59.76                           20                          100
+sa03: What are the average customer age and average number of previous purchases?
+ average_age  average_previous_purchases
+       44.07                       25.35
+sa04: What are the average, minimum, and maximum non-missing review ratings, and how many review ratings are missing?
+ average_review_rating  minimum_review_rating  maximum_review_rating  missing_review_ratings
+                  3.75                    2.5                    5.0                      37
+sa05: How many distinct locations, items, and categories are represented?
+ distinct_locations  distinct_items  distinct_categories
+                 50              25                    4
+sa06: How many subscriber records are there, and what percentage of all records are subscribers as a number between 0 and 100?
+ subscriber_records  subscriber_percentage
+               1053                   27.0
+sa07: How many records have a discount applied, and what percentage of all records is that as a number between 0 and 100?
+ discounted_records  discounted_percentage
+               1677                   43.0
+sa08: How many purchases are at least 80 USD, and what percentage of all purchases is that as a number between 0 and 100?
+ purchases_at_least_80_usd  purchases_at_least_80_percentage
+                      1024                             26.26
+sa09: How many customers are age 50 or older, and what is their average purchase amount?
+ customers_age_50_or_older  average_purchase_amount_usd
+                      1559                        59.92
+sa10: What are the total purchase amount and average purchase amount for subscribers and non-subscribers, in separate columns?
+ subscriber_total_purchase_amount_usd  subscriber_average_purchase_amount_usd  nonsubscriber_total_purchase_amount_usd  nonsubscriber_average_purchase_amount_usd
+                              62645.0                                   59.49                                 170436.0                                      59.87
+sa11: How many records use a promo code, and how many records have both a promo code and a discount applied?
+ promo_code_records  promo_code_and_discount_records
+               1677                             1677
+sa12: What are the total purchase amount and average review rating among records with non-missing review ratings?
+ total_purchase_amount_with_rating  average_nonmissing_review_rating
+                          230629.0                              3.75
+gb01: For each category, what are the record count, total purchase amount, and average purchase amount?
+   category  record_count  total_purchase_amount_usd  average_purchase_amount_usd
+   Clothing          1737                   104264.0                        60.03
+Accessories          1240                    74200.0                        59.84
+   Footwear           599                    36093.0                        60.26
+  Outerwear           324                    18524.0                        57.17
+gb02: For age bands 18-29, 30-44, 45-59, and 60-70, what are the record count and average purchase amount?
+age_band  record_count  average_purchase_amount_usd
+   18-29           878                        60.26
+   30-44          1092                        59.72
+   45-59          1142                        59.60
+   60-70           788                        59.51
+gb03: For each gender, what are the record count, total purchase amount, and average previous purchases?
+gender  record_count  total_purchase_amount_usd  average_previous_purchases
+Female          1248                    75191.0                       24.60
+  Male          2652                   157890.0                       25.71
+gb04: For each season, what are the record count and total purchase amount?
+season  record_count  total_purchase_amount_usd
+  Fall           975                    60018.0
+Spring           999                    58679.0
+Winter           971                    58607.0
+Summer           955                    55777.0
+gb05: For each shipping type, what are the record count and average purchase amount?
+shipping_type  record_count  average_purchase_amount_usd
+Free Shipping           675                        60.41
+     Standard           654                        58.46
+ Store Pickup           650                        59.89
+ Next Day Air           648                        58.63
+      Express           646                        60.48
+gb06: For each payment method, what are the record count and total purchase amount?
+payment_method  record_count  total_purchase_amount_usd
+   Credit Card           671                    40310.0
+        PayPal           677                    40109.0
+          Cash           670                    40002.0
+    Debit Card           636                    38742.0
+         Venmo           634                    37374.0
+gb07: For each frequency of purchases, what are the record count and average previous purchases?
+frequency_of_purchases  record_count  average_previous_purchases
+        Every 3 Months           584                       24.96
+              Annually           572                       24.56
+             Quarterly           563                       26.85
+               Monthly           553                       25.28
+             Bi-Weekly           547                       24.79
+gb08: For each size, what are the record count and total purchase amount?
+size  record_count  total_purchase_amount_usd
+   M          1755                   105167.0
+   L          1053                    61667.0
+   S           663                    40468.0
+  XL           429                    25779.0
+gb09: What are the top 10 colors by total purchase amount, including record count and total purchase amount, breaking ties alphabetically by color?
+ color  record_count  total_purchase_amount_usd
+ Green           169                    11104.0
+  Teal           172                    10459.0
+Yellow           174                    10308.0
+ Olive           177                    10292.0
+  Cyan           166                    10274.0
+gb10: What are the top 10 locations by total purchase amount, including record count and total purchase amount, breaking ties alphabetically by location?
+  location  record_count  total_purchase_amount_usd
+   Montana            96                     5784.0
+  Illinois            92                     5617.0
+California            95                     5605.0
+     Idaho            93                     5587.0
+    Nevada            87                     5514.0
+gb11: What are the top 10 items by total purchase amount, including record count and total purchase amount, breaking ties alphabetically by item name?
+item_purchased  record_count  total_purchase_amount_usd
+        Blouse           171                    10410.0
+         Shirt           169                    10332.0
+         Dress           166                    10320.0
+         Pants           171                    10090.0
+       Jewelry           171                    10010.0
+gb12: For each category and subscription status, what are the record count and average purchase amount?
+   category subscription_status  record_count  average_purchase_amount_usd
+Accessories                  No           906                        60.21
+Accessories                 Yes           334                        58.82
+   Clothing                  No          1280                        60.11
+   Clothing                 Yes           457                        59.78
+   Footwear                  No           428                        60.17
+fc01: Among female customers age 50 or older with purchases of at least 80 USD, what are the record count and average purchase amount?
+ record_count  average_purchase_amount_usd
+          139                        89.38
+fc02: Among male subscribers with at least 25 previous purchases, what are the record count and total purchase amount?
+ record_count  total_purchase_amount_usd
+          569                    33570.0
+fc03: Among records with missing review ratings, what are the record count and average purchase amount?
+ missing_rating_records  average_purchase_amount_usd
+                     37                        66.27
+fc04: Among non-subscribers with review ratings of at least 4.5 and no discount applied, what are the record count and average purchase amount?
+ record_count  average_purchase_amount_usd
+          481                        60.49
+fc05: Among Clothing purchases in Spring with size M, what are the record count and total purchase amount?
+ record_count  total_purchase_amount_usd
+          209                    12875.0
+fc06: Among Footwear purchases in Winter that use Express shipping, what are the record count and average purchase amount?
+ record_count  average_purchase_amount_usd
+           28                        59.79
+fc07: Among purchases from 20 to 40 USD inclusive with no discount applied, what are the record count and average previous purchases?
+ record_count  average_previous_purchases
+          595                       24.82
+fc08: Among subscribers using Express shipping, what are the record count and total purchase amount?
+ record_count  total_purchase_amount_usd
+          190                    11445.0
+fc09: Among monthly shoppers with non-missing review ratings of at least 4.0, what are the record count and average purchase amount?
+ record_count  average_purchase_amount_usd
+          245                        60.89
+fc10: Among customers with at least 40 previous purchases and purchase amounts of at least 75 USD, what are the record count and average review rating?
+ record_count  average_review_rating
+          290                   3.81
+fc11: Among non-subscribers with missing review ratings, what are the record count and total purchase amount?
+ record_count  total_purchase_amount_usd
+           17                     1184.0
+ws01: Rank categories by total purchase amount, breaking ties alphabetically by category.
+   category  total_purchase_amount_usd  revenue_rank
+   Clothing                   104264.0             1
+Accessories                    74200.0             2
+   Footwear                    36093.0             3
+  Outerwear                    18524.0             4
+ws02: For each category, show category, customer ID, item purchased, and purchase amount for the single highest-purchase record, breaking ties by the smallest customer ID.
+   category  customer_id item_purchased  purchase_amount_usd
+Accessories          194           Belt                  100
+   Clothing          456         Blouse                  100
+   Footwear           96       Sneakers                  100
+  Outerwear           43           Coat                  100
+ws03: Show customer ID, category, item purchased, purchase amount, and category average purchase amount for the first 20 records whose purchase amount is above their category average, ordered by category then customer ID.
+ customer_id    category item_purchased  purchase_amount_usd  category_average_purchase_amount_usd
+          29 Accessories        Handbag                   94                                 59.84
+          41 Accessories        Handbag                   76                                 59.84
+          44 Accessories          Scarf                   69                                 59.84
+          57 Accessories       Backpack                   73                                 59.84
+          60 Accessories           Belt                   79                                 59.84
+ws04: Rank locations by total purchase amount, breaking ties alphabetically by location.
+  location  total_purchase_amount_usd  revenue_rank
+   Montana                     5784.0             1
+  Illinois                     5617.0             2
+California                     5605.0             3
+     Idaho                     5587.0             4
+    Nevada                     5514.0             5
+ws05: Rank payment methods by record count, breaking ties alphabetically by payment method.
+payment_method  record_count  count_rank
+        PayPal           677           1
+   Credit Card           671           2
+          Cash           670           3
+    Debit Card           636           4
+         Venmo           634           5
+ws06: For each category, show its top three items by total purchase amount, including category, item name, total purchase amount, and item rank, breaking ties alphabetically by item name.
+   category item_purchased  total_purchase_amount_usd  item_rank
+Accessories        Jewelry                    10010.0          1
+Accessories     Sunglasses                     9649.0          2
+Accessories           Belt                     9635.0          3
+   Clothing         Blouse                    10410.0          1
+   Clothing          Shirt                    10332.0          2
+ws07: For each season, show its total purchase amount and the percentage of total purchase amount it contributes, as a number between 0 and 100.
+season  total_purchase_amount_usd  purchase_amount_percentage
+  Fall                    60018.0                       25.75
+Spring                    58679.0                       25.18
+Summer                    55777.0                       23.93
+Winter                    58607.0                       25.14
+ws08: Show customer ID, category, purchase amount, and category average purchase amount for the first 20 records with a purchase amount above their category average, ordered by customer ID.
+ customer_id  category  purchase_amount_usd  category_average_purchase_amount_usd
+           2  Clothing                   64                                 60.03
+           3  Clothing                   73                                 60.03
+           4  Footwear                   90                                 60.26
+           7  Clothing                   85                                 60.03
+           9 Outerwear                   97                                 57.17
+ws09: Which locations have total purchase amount above the average location total, ordered from highest total then alphabetically?
+  location  total_purchase_amount_usd
+   Montana                     5784.0
+  Illinois                     5617.0
+California                     5605.0
+     Idaho                     5587.0
+    Nevada                     5514.0
+ws10: For each gender, what percentage of that gender's purchase amount comes from subscribers, as a number between 0 and 100?
+gender  subscriber_purchase_percentage
+Female                            0.00
+  Male                           39.68
+gold queries executed successfully: 45

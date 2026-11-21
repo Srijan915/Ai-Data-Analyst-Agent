@@ -54,6 +54,9 @@ def test_upload_analysis_results_chart_and_context(uploaded_app):
     result = app.session_state.last_result
     assert result.query_result.dataframe.to_dict('records') == [
         {'product':'A','total_sales':400},{'product':'B','total_sales':200}]
+    assert result.validation.cleaned_sql != result.sql
+    assert app.code[0].value == result.validation.cleaned_sql
+    assert app.get('download_button')[0].label == 'Export results as CSV'
     assert any('A has total sales' in item.value for item in app.markdown)
     assert len(app.get('plotly_chart')) + len(app.get('arrow_vega_lite_chart')) > 0
     assert len(app.session_state.conversation_history) == 1

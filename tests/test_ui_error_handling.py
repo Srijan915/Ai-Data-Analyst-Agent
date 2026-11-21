@@ -17,7 +17,7 @@ from app.core.llm_client import (
 )
 from app.main import _display_chart
 from app.models.schemas import QueryResult
-from app.ui.analysis import _planning_error_message, display_analysis_result
+from app.ui.analysis import _build_column_config, _planning_error_message, display_analysis_result
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MAIN_MODULE = PROJECT_ROOT / "app" / "main.py"
@@ -25,6 +25,20 @@ MAIN_MODULE = PROJECT_ROOT / "app" / "main.py"
 
 def _main_source() -> str:
     return MAIN_MODULE.read_text(encoding="utf-8") + "\n" + (PROJECT_ROOT / "app/ui/analysis.py").read_text(encoding="utf-8")
+
+
+def test_result_display_does_not_force_float_or_timestamp_precision():
+    frame = pd.DataFrame({
+        "id": [1],
+        "rate": [0.00012345],
+        "observed_at": [pd.Timestamp("2025-01-01 13:45:30")],
+    })
+
+    column_config = _build_column_config(frame)
+
+    assert "id" in column_config
+    assert "rate" not in column_config
+    assert "observed_at" not in column_config
 
 
 def test_streamlit_ui_does_not_render_raw_exceptions():

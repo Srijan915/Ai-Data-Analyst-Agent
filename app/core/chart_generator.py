@@ -68,13 +68,13 @@ logger = get_logger(__name__)
 # --------------------------------------------------------------------------
 
 DARK_THEME_COLORWAY = [
-    "#0EA5E9",  # Electric sky / teal
-    "#06B6D4",  # Cyan
-    "#6366F1",  # Indigo
-    "#10B981",  # Emerald
-    "#F59E0B",  # Amber
-    "#8B5CF6",  # Violet
-    "#EC4899",  # Pink
+    "#173D32",  # Electric sky / teal
+    "#607F59",  # Cyan
+    "#89966A",  # Indigo
+    "#A9B9A0",  # Emerald
+    "#B8A47C",  # Amber
+    "#697D70",  # Violet
+    "#8D7866",  # Pink
 ]
 
 DEFAULT_MAX_CATEGORIES = 20
@@ -1044,13 +1044,13 @@ def style_dark_figure(
     x_title: Optional[str] = None,
     y_title: Optional[str] = None,
 ) -> go.Figure:
-    """Apply the workspace dark analytics chart theme to a Plotly figure."""
+    """Apply the workspace cream and forest chart theme to a Plotly figure."""
 
     layout_updates: Dict[str, Any] = {
         "paper_bgcolor": "rgba(0,0,0,0)",
-        "plot_bgcolor": "rgba(15, 23, 42, 0.55)",
+        "plot_bgcolor": "rgba(255, 254, 248, 1)",
         "font": dict(
-            color="#94A3B8",
+            color="#5C6D60",
             size=12,
             family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif",
         ),
@@ -1061,36 +1061,43 @@ def style_dark_figure(
             y=-0.22,
             xanchor="center",
             x=0.5,
-            font=dict(color="#CBD5E1", size=11),
+            font=dict(color="#26362F", size=11),
         ),
         "margin": dict(t=16, b=64, l=16, r=16),
         "autosize": True,
         "title": None,
         "hoverlabel": dict(
-            bgcolor="#0F172A",
-            bordercolor="#0EA5E9",
-            font=dict(color="#F8FAFC", size=12),
+            bgcolor="#173D32",
+            bordercolor="#173D32",
+            font=dict(color="#FFFEF8", size=12),
         ),
     }
 
     fig.update_layout(**layout_updates)
+    for index, trace in enumerate(fig.data):
+        if trace.type == "pie":
+            trace.marker.colors = DARK_THEME_COLORWAY
+        elif hasattr(trace, "marker") and isinstance(trace.marker.color, str) and trace.marker.color in px.colors.qualitative.Plotly:
+            trace.marker.color = DARK_THEME_COLORWAY[index % len(DARK_THEME_COLORWAY)]
+        if hasattr(trace, "line") and trace.line.color in px.colors.qualitative.Plotly:
+            trace.line.color = DARK_THEME_COLORWAY[index % len(DARK_THEME_COLORWAY)]
 
     fig.update_xaxes(
         showgrid=True,
-        gridcolor="rgba(255, 255, 255, 0.07)",
+        gridcolor="rgba(23, 61, 50, 0.1)",
         zeroline=False,
-        tickfont=dict(color="#94A3B8"),
-        title_font=dict(color="#CBD5E1"),
+        tickfont=dict(color="#5C6D60"),
+        title_font=dict(color="#26362F"),
     )
     if x_title is not None:
         fig.update_xaxes(title_text=x_title)
 
     fig.update_yaxes(
         showgrid=True,
-        gridcolor="rgba(255, 255, 255, 0.07)",
+        gridcolor="rgba(23, 61, 50, 0.1)",
         zeroline=False,
-        tickfont=dict(color="#94A3B8"),
-        title_font=dict(color="#CBD5E1"),
+        tickfont=dict(color="#5C6D60"),
+        title_font=dict(color="#26362F"),
     )
     if y_title is not None:
         fig.update_yaxes(title_text=y_title)
@@ -1235,7 +1242,7 @@ def _get_agent_table_name(agent: Any) -> str:
         if agent is not None:
             catalog = getattr(agent, "_dataset_catalog", None)
             if catalog is not None and not type(catalog).__name__.startswith("Mock"):
-                names = getattr(catalog, "table_names", None)
+                names = catalog.profile.table_names
                 if isinstance(names, (list, tuple)) and names:
                     return str(names[0])
     except Exception:
@@ -1248,6 +1255,7 @@ def generate_dataset_auto_visualizations(
     profile: Optional[Any] = None,
     max_charts: int = 4,
     agent: Optional[Any] = None,
+    table_name: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Automatically identify suitable columns and generate meaningful visualizations.
@@ -1262,7 +1270,7 @@ def generate_dataset_auto_visualizations(
     date_cols = classified["datetime"]
 
     # Check whether df is a sample vs full dataset
-    tbl_name = _get_agent_table_name(agent)
+    tbl_name = table_name or _get_agent_table_name(agent)
     profile_rows = getattr(profile, "row_count", None) or getattr(profile, "total_rows", None)
     is_sample_fallback = bool(profile_rows and profile_rows > len(df))
     sample_notice = f"Based on first {len(df):,} rows" if is_sample_fallback else None
@@ -1292,7 +1300,7 @@ def generate_dataset_auto_visualizations(
                 fig = px.bar(cat_df, x="count", y="cat", orientation="h")
                 fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed([str(v) for v in cat_df["cat"]]))))
                 fig.update_xaxes(rangemode="tozero")
-                fig.update_traces(marker_color="#0EA5E9", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
+                fig.update_traces(marker_color="#173D32", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
                 style_dark_figure(fig, title=f"Distribution: {primary_cat}", x_title="Count", y_title="")
                 charts.append({
                     "id": f"bar_{primary_cat}",
@@ -1328,7 +1336,7 @@ def generate_dataset_auto_visualizations(
                 fig = px.bar(top_10, x="count", y="cat", orientation="h")
                 fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed([str(v) for v in top_10["cat"]]))))
                 fig.update_xaxes(rangemode="tozero")
-                fig.update_traces(marker_color="#0EA5E9", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
+                fig.update_traces(marker_color="#173D32", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
                 style_dark_figure(fig, title=f"Top {primary_cat} by Count", x_title="Count", y_title="")
                 charts.append({
                     "id": f"bar_{primary_cat}",
@@ -1355,7 +1363,7 @@ def generate_dataset_auto_visualizations(
                     fig = px.bar(two_df, x="count", y=primary_cat, orientation="h")
                     fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed(labels))))
                     fig.update_xaxes(rangemode="tozero")
-                    fig.update_traces(marker_color="#0EA5E9", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
+                    fig.update_traces(marker_color="#173D32", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
                     style_dark_figure(fig, title=f"Distribution: {primary_cat}", x_title="Count", y_title="")
                     charts.append({
                         "id": f"bar_{primary_cat}",
@@ -1394,7 +1402,7 @@ def generate_dataset_auto_visualizations(
                     fig = px.bar(top_10, x="count", y=primary_cat, orientation="h")
                     fig.update_layout(yaxis=dict(categoryorder="array", categoryarray=list(reversed([str(v) for v in top_10[primary_cat]]))))
                     fig.update_xaxes(rangemode="tozero")
-                    fig.update_traces(marker_color="#0EA5E9", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
+                    fig.update_traces(marker_color="#173D32", hovertemplate="<b>%{y}</b><br>Count: %{x:,}<extra></extra>")
                     style_dark_figure(fig, title=f"Top {primary_cat} by Count", x_title="Count", y_title="")
                     charts.append({
                         "id": f"bar_{primary_cat}",
@@ -1438,7 +1446,7 @@ def generate_dataset_auto_visualizations(
         if trend_df is not None and len(trend_df) >= 2:
             trend_df = trend_df.dropna(subset=["period", "val"]).sort_values("period")
             fig = px.line(trend_df, x="period", y="val", markers=len(trend_df) <= 60)
-            fig.update_traces(line=dict(width=2.5, color="#06B6D4"), hovertemplate="<b>Date: %{x}</b><br>Value: %{y:,.2f}<extra></extra>")
+            fig.update_traces(line=dict(width=2.5, color="#607F59"), hovertemplate="<b>Date: %{x}</b><br>Value: %{y:,.2f}<extra></extra>")
             fig.update_yaxes(autorange=True, rangemode="normal")
             style_dark_figure(fig, title=f"{trunc_name} {metric_label} Trend ({date_col})", x_title="Date", y_title=metric_label)
             charts.append({
@@ -1478,7 +1486,7 @@ def generate_dataset_auto_visualizations(
 
                     if len(trend_df) >= 2:
                         fig = px.line(trend_df, x="date", y="val", markers=len(trend_df) <= 60)
-                        fig.update_traces(line=dict(width=2.5, color="#06B6D4"), hovertemplate="<b>Date: %{x}</b><br>Value: %{y:,.2f}<extra></extra>")
+                        fig.update_traces(line=dict(width=2.5, color="#607F59"), hovertemplate="<b>Date: %{x}</b><br>Value: %{y:,.2f}<extra></extra>")
                         fig.update_yaxes(autorange=True, rangemode="normal")
                         style_dark_figure(fig, title=f"{trunc_name} {metric_label} Trend ({date_col})", x_title="Date", y_title=metric_label)
                         desc_suffix = f" ({sample_notice})" if sample_notice else ""
@@ -1517,7 +1525,7 @@ def generate_dataset_auto_visualizations(
                     {"label": "Min - Max", "value": f"{min_v:,.1f} to {max_v:,.1f}"},
                     {"label": "Total Analyzed", "value": f"{total_n:,}"},
                 ]
-                sample_lbl = None
+                sample_lbl = sample_notice
             else:
                 mean_v = float(num_series.mean())
                 median_v = float(num_series.median())
@@ -1532,9 +1540,11 @@ def generate_dataset_auto_visualizations(
 
             hist_df = pd.DataFrame({primary_num: num_series})
             hist_sample = hist_df.sample(5000, random_state=42) if len(hist_df) > 5000 else hist_df
+            if len(hist_df) > 5000:
+                sample_lbl = f"Histogram uses 5,000 sampled rows" + (f" from the first {len(df):,} rows" if sample_notice else "")
 
             fig = px.histogram(hist_sample, x=primary_num, nbins=25, marginal="box")
-            fig.update_traces(marker_color="#06B6D4", marker_line_color="#0EA5E9", marker_line_width=1, opacity=0.85, hovertemplate=f"Range: %{{x}}<br>Count: %{{y:,}}<extra></extra>")
+            fig.update_traces(marker_color="#607F59", marker_line_color="#173D32", marker_line_width=1, opacity=0.85, hovertemplate=f"Range: %{{x}}<br>Count: %{{y:,}}<extra></extra>")
             fig.update_yaxes(rangemode="tozero")
             style_dark_figure(fig, title=f"Distribution: {primary_num}", x_title=primary_num, y_title="Frequency")
             charts.append({
@@ -1560,7 +1570,7 @@ def generate_dataset_auto_visualizations(
         if grp_df is not None and len(grp_df) >= 2:
             fig = px.bar(grp_df, x="cat", y="avg_v")
             fig.update_yaxes(rangemode="tozero")
-            fig.update_traces(marker_color="#10B981", hovertemplate=f"<b>%{{x}}</b><br>Average {agg_num}: %{{y:,.2f}}<extra></extra>")
+            fig.update_traces(marker_color="#A9B9A0", hovertemplate=f"<b>%{{x}}</b><br>Average {agg_num}: %{{y:,.2f}}<extra></extra>")
             style_dark_figure(fig, title=f"Avg {agg_num} by {agg_cat}", x_title=agg_cat, y_title=f"Average {agg_num}")
             charts.append({
                 "id": f"agg_bar_{agg_cat}_{agg_num}",
@@ -1579,7 +1589,7 @@ def generate_dataset_auto_visualizations(
             if len(grouped) >= 2:
                 fig = px.bar(grouped, x=agg_cat, y=agg_num)
                 fig.update_yaxes(rangemode="tozero")
-                fig.update_traces(marker_color="#10B981", hovertemplate=f"<b>%{{x}}</b><br>Average {agg_num}: %{{y:,.2f}}<extra></extra>")
+                fig.update_traces(marker_color="#A9B9A0", hovertemplate=f"<b>%{{x}}</b><br>Average {agg_num}: %{{y:,.2f}}<extra></extra>")
                 style_dark_figure(fig, title=f"Avg {agg_num} by {agg_cat}", x_title=agg_cat, y_title=f"Average {agg_num}")
                 desc_suffix = f" ({sample_notice})" if sample_notice else ""
                 charts.append({
@@ -1606,7 +1616,7 @@ def generate_dataset_auto_visualizations(
             corr_str = f"{corr_val:.2f}" if pd.notna(corr_val) else "N/A"
 
             fig = px.scatter(pair_sample, x=x_num, y=y_num, opacity=0.75)
-            fig.update_traces(marker=dict(size=7, color="#6366F1", line=dict(width=1, color="#A5B4FC")), hovertemplate=f"<b>{x_num}:</b> %{{x:,.2f}}<br><b>{y_num}:</b> %{{y:,.2f}}<extra></extra>")
+            fig.update_traces(marker=dict(size=7, color="#89966A", line=dict(width=1, color="#DCE5D6")), hovertemplate=f"<b>{x_num}:</b> %{{x:,.2f}}<br><b>{y_num}:</b> %{{y:,.2f}}<extra></extra>")
             style_dark_figure(fig, title=f"{x_num} vs {y_num}", x_title=x_num, y_title=y_num)
             charts.append({
                 "id": f"scatter_{x_num}_{y_num}",
@@ -1620,8 +1630,6 @@ def generate_dataset_auto_visualizations(
                     {"label": "Points Plotted", "value": f"{len(pair_sample):,}"},
                 ],
             })
-
-    return charts[:max_charts]
 
     return charts[:max_charts]
 
@@ -1780,8 +1788,8 @@ def build_custom_dataset_figure(
                 marginal="box" if show_box else None,
             )
             fig.update_traces(
-                marker_color="#06B6D4",
-                marker_line_color="#0EA5E9",
+                marker_color="#607F59",
+                marker_line_color="#173D32",
                 marker_line_width=1,
                 opacity=0.85,
                 hovertemplate=f"Range: %{{x}}<br>Count: %{{y:,}}<extra></extra>",

@@ -1,5 +1,5 @@
 """
-AI Data Analyst Agent — Streamlit application entry point.
+QueryPilotAI Streamlit application entry point.
 
 Application pipeline:
 
@@ -33,12 +33,10 @@ Business logic remains inside app.core.
 
 import hmac
 import html
+from io import BytesIO
 import os
 import sys
 from pathlib import Path
-import importlib.util
-import importlib.metadata
-import subprocess
 
 
 # --------------------------------------------------------------------------
@@ -61,30 +59,7 @@ import streamlit as st
 
 
 # --------------------------------------------------------------------------
-# Cloud dependency diagnostic
-# --------------------------------------------------------------------------
-
-st.write("Python:", sys.version)
-st.write("Python executable:", sys.executable)
-st.write("Plotly spec:", importlib.util.find_spec("plotly"))
-
-try:
-    st.write("Installed Plotly version:", importlib.metadata.version("plotly"))
-except importlib.metadata.PackageNotFoundError:
-    st.error("Plotly distribution is NOT installed in this environment.")
-
-result = subprocess.run(
-    [sys.executable, "-m", "pip", "show", "plotly"],
-    capture_output=True,
-    text=True
-)
-
-st.write("Pip show output:", result.stdout)
-st.write("Pip show errors:", result.stderr)
-
-
-# --------------------------------------------------------------------------
-# Plotly import
+# Plotly charting
 # --------------------------------------------------------------------------
 
 import plotly.express as px
@@ -93,6 +68,12 @@ import plotly.express as px
 # --------------------------------------------------------------------------
 
 from app.ui.analysis import _run_analysis, display_analysis_result
+from app.ui.theme import apply_theme, style_figure as _style_plotly_figure, CHART_COLORS as PLOTLY_COLORWAY
+from app.file_handlers.csv_handler import delimiter_for, load_csv_bytes
+from app.file_handlers.detect_format import detect_format, read_upload
+from app.file_handlers.excel_handler import load_excel_bytes, sheet_names
+from app.file_handlers.pdf_handler import load_pdf_bytes
+from app.file_handlers.txt_handler import load_txt_bytes
 from app.config import config
 from app.core.agent import (
     AgentCapacityError,
@@ -118,6 +99,7 @@ from app.core.chart_generator import (
 from app.core.query_planner import MAX_CONVERSATION_TURNS
 from app.utils.logger import get_logger
 from app.utils.dataset_resources import DatasetResourceError, dataset_preparation_slot
+from app.preprocessing.ui import render_preprocessing
 
 
 logger = get_logger(__name__)
@@ -138,70 +120,10 @@ st.set_page_config(
 
 
 # --------------------------------------------------------------------------
-# Global CSS
+# Theme
 # --------------------------------------------------------------------------
 
-st.html("<style>" + (PROJECT_ROOT / "app/ui/styles.css").read_text(encoding="utf-8") + "</style>")
-
-PLOTLY_COLORWAY = [
-    "#0EA5E9",  # Electric sky / teal
-    "#06B6D4",  # Cyan
-    "#6366F1",  # Indigo
-    "#10B981",  # Emerald
-    "#F59E0B",  # Amber
-    "#8B5CF6",  # Violet
-    "#EC4899",  # Pink
-]
-
-
-# --------------------------------------------------------------------------
-# Helper functions
-# --------------------------------------------------------------------------
-
-def _style_plotly_figure(fig):
-    """Apply the workspace dark analytics chart theme without changing plotted data."""
-
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(15, 23, 42, 0.55)",
-        font=dict(
-            color="#94A3B8",
-            size=12,
-            family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif",
-        ),
-        colorway=PLOTLY_COLORWAY,
-        legend=dict(
-            orientation="h",
-            yanchor="top",
-            y=-0.22,
-            xanchor="center",
-            x=0.5,
-            font=dict(color="#CBD5E1", size=11),
-        ),
-        margin=dict(t=16, b=64, l=16, r=16),
-        autosize=True,
-        title=None,
-        hoverlabel=dict(
-            bgcolor="#0F172A",
-            bordercolor="#0EA5E9",
-            font=dict(color="#F8FAFC", size=12),
-        ),
-    )
-    fig.update_xaxes(
-        showgrid=True,
-        gridcolor="rgba(255, 255, 255, 0.07)",
-        zeroline=False,
-        tickfont=dict(color="#94A3B8"),
-        title_font=dict(color="#CBD5E1"),
-    )
-    fig.update_yaxes(
-        showgrid=True,
-        gridcolor="rgba(255, 255, 255, 0.07)",
-        zeroline=False,
-        tickfont=dict(color="#94A3B8"),
-        title_font=dict(color="#CBD5E1"),
-    )
-    return fig
+apply_theme()
 
 
 def _get_suggested_questions(profile) -> list[str]:
@@ -213,7 +135,9 @@ def _get_suggested_questions(profile) -> list[str]:
             "Show distribution and breakdown by category",
         ]
 
-    cols = profile.columns
+    # Identifiers are poor default measures or groupings. Prefer additive
+    # business measures when present, then offer concrete schema-based prompts.
+    cols = [c for c in profile.columns if c.name.lower().replace('_', ' ').split()[-1] not in {'id', 'identifier'}]
     numeric_candidates = [
         c.name for c in cols
         if str(c.inferred_type).lower() in ("integer", "float", "numeric", "decimal")
@@ -224,12 +148,14 @@ def _get_suggested_questions(profile) -> list[str]:
         if c.name not in numeric_candidates
         and (str(c.inferred_type).lower() in ("string", "category", "text") or c.unique_count <= 250)
     ]
+    numeric_candidates.sort(key=lambda name: not any(word in name.lower() for word in ("sales", "revenue", "amount", "cost", "quantity")))
+    cat_candidates.sort(key=lambda name: "category" not in name.lower())
 
     suggestions = []
     if numeric_candidates and cat_candidates:
         suggestions.append(f"Top 5 {cat_candidates[0]} by total {numeric_candidates[0]}")
         if len(numeric_candidates) > 1:
-            suggestions.append(f"Compare {numeric_candidates[0]} & {numeric_candidates[1]} by {cat_candidates[0]}")
+            suggestions.append(f"Average {numeric_candidates[0]} by {cat_candidates[0]}")
         elif len(cat_candidates) > 1:
             suggestions.append(f"Average {numeric_candidates[0]} grouped by {cat_candidates[1]}")
         else:
@@ -242,9 +168,9 @@ def _get_suggested_questions(profile) -> list[str]:
         suggestions.append(f"Count of records grouped by {cat_candidates[0]}")
 
     fallbacks = [
-        "Top 10 records by highest values",
-        "Summary breakdown of key metrics",
-        "Distribution and outlier breakdown",
+        "How many records are in this dataset?",
+        "Show the first 10 records",
+        "Which columns have missing values?",
     ]
     for fb in fallbacks:
         if len(suggestions) < 3 and fb not in suggestions:
@@ -263,7 +189,7 @@ def _workspace_status() -> tuple[str, str, str]:
 
     if st.session_state.get("upload_error"):
         return "Paused", "is-paused", "status-chip--paused"
-    if st.session_state.get("dataframe") is not None:
+    if st.session_state.get("dataframe") is not None or st.session_state.get("documents"):
         return "Ready", "is-ready", "status-chip--ready"
     return "No dataset", "", "status-chip--empty"
 
@@ -278,6 +204,16 @@ def _initialize_session_state() -> None:
         st.session_state.dataset_profile = None
     if "dataset_catalog" not in st.session_state:
         st.session_state.dataset_catalog = None
+    if "documents" not in st.session_state:
+        st.session_state.documents = []
+    if "pdf_page_errors" not in st.session_state:
+        st.session_state.pdf_page_errors = []
+    if "pdf_notices" not in st.session_state:
+        st.session_state.pdf_notices = []
+    if "show_preprocess" not in st.session_state:
+        st.session_state.show_preprocess = False
+    if "preprocess_report" not in st.session_state:
+        st.session_state.preprocess_report = None
 
     if "upload_error" not in st.session_state:
         st.session_state.upload_error = False
@@ -333,7 +269,7 @@ def _render_public_demo_access_gate() -> bool:
         </div>
         """
     )
-    st.title("🔒 Private Portfolio Demo")
+    st.title("QueryPilotAI Private Demo")
     st.caption(
         "This demo is access-controlled to protect the AI service quota "
         "used for analysis."
@@ -382,6 +318,11 @@ def _clear_dataset() -> None:
     st.session_state.dataframe = None
     st.session_state.dataset_profile = None
     st.session_state.dataset_catalog = None
+    st.session_state.documents = []
+    st.session_state.pdf_page_errors = []
+    st.session_state.pdf_notices = []
+    st.session_state.show_preprocess = False
+    st.session_state.preprocess_report = None
     st.session_state.agent = None
     st.session_state.last_result = None
     st.session_state.uploaded_filename = None
@@ -500,6 +441,11 @@ def _load_uploaded_file(
     # a previously active catalog. The retired agent above owns and closes
     # that catalog before this reference is cleared.
     st.session_state.dataset_catalog = None
+    st.session_state.show_preprocess = False
+    st.session_state.preprocess_report = None
+    st.session_state.documents = []
+    st.session_state.pdf_page_errors = []
+    st.session_state.pdf_notices = []
     st.session_state.agent = agent
     st.session_state.last_result = None
     st.session_state.conversation_history = []
@@ -568,6 +514,11 @@ def _load_multiple_files(uploaded_files, upload_signature: tuple) -> None:
     st.session_state.dataframe = dataframe
     st.session_state.dataset_profile = first.profile
     st.session_state.dataset_catalog = catalog
+    st.session_state.show_preprocess = False
+    st.session_state.preprocess_report = None
+    st.session_state.documents = []
+    st.session_state.pdf_page_errors = []
+    st.session_state.pdf_notices = []
     st.session_state.agent = agent
     st.session_state.last_result = None
     st.session_state.conversation_history = []
@@ -576,13 +527,161 @@ def _load_multiple_files(uploaded_files, upload_signature: tuple) -> None:
     st.success(f"✅ Loaded {len(records)} isolated CSV datasets. Confirm a suggested relationship before asking for a join.")
 
 
+def _inspect_format_files(uploaded_files):
+    inspected = []
+    for index, upload in enumerate(uploaded_files):
+        name = getattr(upload, "name", "uploaded file")
+        data = read_upload(upload)
+        kind, warning = detect_format(name, data)
+        if warning:
+            st.warning(warning)
+        sheets = []
+        if kind == "xlsx":
+            available = sheet_names(data)
+            sheets = st.multiselect(
+                f"Sheets from {name}", available, default=available,
+                key=f"excel_sheets_{index}_{getattr(upload, 'file_id', name)}",
+            )
+        inspected.append((name, data, kind, sheets))
+    return inspected
+
+
+def _uses_original_csv_path(inspected):
+    for _, data, kind, _ in inspected:
+        if kind != "csv":
+            return False
+        try:
+            if delimiter_for(data.decode("utf-8-sig")) != ",":
+                return False
+        except UnicodeDecodeError:
+            return False
+    return True
+
+
+def _parse_format_files(inspected):
+    parts = []
+    for name, data, kind, sheets in inspected:
+        if kind == "csv":
+            parts.extend(load_csv_bytes(data, name))
+        elif kind == "xlsx":
+            parts.extend(load_excel_bytes(data, name, sheets))
+        elif kind == "txt":
+            parts.extend(load_txt_bytes(data, name))
+        elif kind == "pdf":
+            parts.extend(load_pdf_bytes(data, name))
+    return parts
+
+
+def _catalog_from_parts(tables):
+    from app.core.dataset_catalog import DatasetCatalog
+    catalog = DatasetCatalog()
+    try:
+        for part in tables:
+            data = part["dataframe"].to_csv(index=False).encode("utf-8-sig")
+            upload = BytesIO(data)
+            upload.name = part["name"].replace("/", "_").replace("\\", "_") + ".csv"
+            record = catalog.add(upload, upload.name)
+            record.filename = part["name"]
+        return catalog
+    except Exception:
+        catalog.close()
+        raise
+
+
+def _activate_format_files(catalog, documents, signature, failures, notices):
+    records = catalog.profile.datasets if catalog is not None else []
+    first = records[0] if records else None
+    # A worksheet change can retire the dataset selected by the catalog widget.
+    if first and st.session_state.get("catalog_selected_dataset") not in {
+        record.dataset_id for record in records
+    }:
+        st.session_state.catalog_selected_dataset = first.dataset_id
+    frame = pd.DataFrame(first.profile.sample_rows, columns=first.profile.column_names) if first else None
+    agent = DataAnalystAgent(dataframe=frame, dataset_profile=catalog.profile,
+                             max_result_rows=config.max_query_result_rows,
+                             dataset_catalog=catalog) if catalog else None
+    if st.session_state.agent is not None:
+        st.session_state.agent.release_dataset()
+    st.session_state.agent = agent
+    st.session_state.dataset_catalog = catalog
+    st.session_state.show_preprocess = False
+    st.session_state.preprocess_report = None
+    st.session_state.dataframe = frame
+    st.session_state.dataset_profile = first.profile if first else None
+    st.session_state.documents = documents
+    st.session_state.pdf_page_errors = failures
+    st.session_state.pdf_notices = notices
+    st.session_state.uploaded_filename = f"{len(records)} tables, {len(documents)} documents"
+    st.session_state.uploaded_file_signature = signature
+    st.session_state.failed_upload_signature = None
+    st.session_state.upload_error = False
+    st.session_state.last_result = None
+    st.session_state.conversation_history = []
+    if records or documents:
+        st.success(f"Loaded {len(records)} table(s) and {len(documents)} document(s).")
+
+
+def _load_format_files(inspected, signature):
+    st.session_state.upload_error = True
+    st.session_state.failed_upload_signature = signature
+    st.session_state.last_result = None
+    st.session_state.conversation_history = []
+    catalog = None
+    try:
+        with dataset_preparation_slot():
+            parts = _parse_format_files(inspected)
+            tables = [part for part in parts if "dataframe" in part]
+            documents = [part for part in parts if "text" in part]
+            failures = [failure for part in parts for failure in part.get("page_errors", [])]
+            notices = [part["notice"] for part in parts if "notice" in part]
+            if tables:
+                catalog = _catalog_from_parts(tables)
+            _activate_format_files(catalog, documents, signature, failures, notices)
+    except (ValueError, DatasetResourceError, DataLoaderError) as exc:
+        if catalog is not None:
+            catalog.close()
+        st.error(f"Could not load the selected files: {exc}")
+    except Exception:
+        if catalog is not None:
+            catalog.close()
+        logger.exception("Unexpected error while preparing uploaded files")
+        st.error("Could not prepare the selected files. Check their contents and retry.")
+
+
+def _render_document_previews():
+    for notice in st.session_state.pdf_notices:
+        st.warning(notice)
+    if st.session_state.pdf_page_errors:
+        st.warning("Pages that failed")
+        for failure in st.session_state.pdf_page_errors:
+            st.caption(f"{failure['name']} · page {failure['page']}: {failure['message']}")
+    if not st.session_state.documents:
+        return
+    st.subheader("Document previews")
+    for index, document in enumerate(st.session_state.documents):
+        with st.expander(document["name"], expanded=True):
+            st.text_area("Text preview", value=document["text"][:4000],
+                         height=150, disabled=True, key=f"document_preview_{index}")
+            if document.get("format") == "pdf":
+                st.caption("PDF page text may repeat extracted table cells.")
+            if len(document["text"]) > 4000:
+                st.caption("Preview shows the first 4,000 characters; the full text remains in this session.")
+
+
 def _refresh_catalog_session() -> None:
     """Update UI/agent views after a safe catalog mutation."""
+    # Approval buttons rerun before the composer renders. Preserve the draft
+    # across Streamlit's cleanup of widgets absent from that interrupted run.
+    if st.session_state.get("query_input_composer") is not None:
+        st.session_state.pending_query = st.session_state.query_input_composer
     catalog = st.session_state.dataset_catalog
     records = catalog.profile.datasets
     if not records:
         _clear_dataset()
         return
+    report = st.session_state.get("preprocess_report")
+    if report and report["processed_id"] not in {record.dataset_id for record in records}:
+        st.session_state.preprocess_report = None
     first = records[0]
     dataframe = pd.DataFrame(first.profile.sample_rows, columns=first.profile.column_names)
     st.session_state.agent.refresh_catalog(dataframe)
@@ -606,6 +705,7 @@ def _render_catalog_controls() -> None:
                 "File": record.filename,
                 "Table": record.table_name,
                 "Rows": record.row_count,
+                "Columns": record.profile.column_count,
             }
             for record in records
         ],
@@ -619,6 +719,20 @@ def _render_catalog_controls() -> None:
         key="catalog_selected_dataset",
     )
     selected = next(record for record in records if record.dataset_id == selected_id)
+    st.caption(f"Previewing {selected.filename}. Analysis can query every registered dataset.")
+    st.session_state.dataset_profile = selected.profile
+    st.session_state.dataframe = pd.DataFrame(selected.profile.sample_rows, columns=selected.profile.column_names)
+    with st.expander("Registered schemas", expanded=False):
+        for record in records:
+            st.markdown(f"**{record.filename}**")
+            st.code(record.table_name, language="text")
+            st.dataframe([
+                {"Column": c.name, "Type": c.pandas_dtype, "Missing": c.null_count}
+                for c in record.profile.columns
+            ], hide_index=True, use_container_width=True)
+            st.caption("Preview (first five rows)")
+            st.dataframe(pd.DataFrame(record.profile.sample_rows, columns=record.profile.column_names),
+                         hide_index=True, use_container_width=True)
     replacement = st.file_uploader(
         "Replacement CSV",
         type=["csv"],
@@ -648,31 +762,38 @@ def _render_catalog_controls() -> None:
                 st.error("❌ Replacement failed; the existing dataset is unchanged.")
 
     relationships = catalog.profile.relationships
+    st.subheader("Relationships")
     if not relationships:
+        st.info("No compatible shared keys were found. You can analyze each dataset separately; a join needs a real shared key.")
         return
-    st.caption("Suggested joins stay unused until you confirm them.")
+    st.caption("Review the shared keys below. Confirmation checks for a complete unique key on at least one side; every generated join is checked again before execution.")
+    names = {record.table_name: record.filename for record in records}
     for index, relation in enumerate(relationships):
         st.caption(
-            f"{relation.left_table}.{relation.left_column} ↔ "
-            f"{relation.right_table}.{relation.right_column} · "
-            f"{relation.status} · {relation.overlap_percentage:.0f}% overlap"
+            f"{names[relation.left_table]} / {relation.left_column} ↔ "
+            f"{names[relation.right_table]} / {relation.right_column} · "
+            f"{relation.status.upper()} · {relation.overlap_percentage:.0f}% observed key overlap (up to 10,001 distinct values per table)"
         )
-        if relation.status != "suggested":
-            continue
         confirm_col, reject_col = st.columns(2)
         with confirm_col:
-            if st.button("Confirm join", key=f"confirm_rel_{index}", use_container_width=True):
-                catalog.set_relationship_status(
-                    relation.left_table, relation.left_column,
-                    relation.right_table, relation.right_column, "confirmed",
-                )
-                st.rerun()
+            if st.button("Confirm join", key=f"confirm_rel_{index}", disabled=relation.status == "confirmed", use_container_width=True):
+                try:
+                    catalog.set_relationship_status(
+                        relation.left_table, relation.left_column,
+                        relation.right_table, relation.right_column, "confirmed",
+                    )
+                except ValueError as exc:
+                    st.warning(str(exc))
+                else:
+                    _refresh_catalog_session()
+                    st.rerun()
         with reject_col:
-            if st.button("Reject join", key=f"reject_rel_{index}", use_container_width=True):
+            if st.button("Revoke join" if relation.status == "confirmed" else "Reject join", key=f"reject_rel_{index}", disabled=relation.status == "rejected", use_container_width=True):
                 catalog.set_relationship_status(
                     relation.left_table, relation.left_column,
                     relation.right_table, relation.right_column, "rejected",
                 )
+                _refresh_catalog_session()
                 st.rerun()
 
 
@@ -778,8 +899,10 @@ def _display_explore_dataset() -> None:
         st.caption(
             "Visual exploration generated directly from your uploaded dataset, independent of AI query results."
         )
+        if st.session_state.dataset_catalog is not None:
+            st.caption(f"Overview charts query the selected table where supported. Custom charts use its {len(dataframe):,} preview rows; ask a question for complete-table analysis.")
 
-        tab_auto, tab_custom = st.tabs(["✨ Auto Insights", "🎨 Interactive Visualizer"])
+        tab_auto, tab_custom = st.tabs(["Overview charts", "Build a chart"])
 
         with tab_auto:
             auto_charts = generate_dataset_auto_visualizations(
@@ -787,6 +910,11 @@ def _display_explore_dataset() -> None:
                 profile=profile,
                 max_charts=4,
                 agent=st.session_state.agent,
+                table_name=(
+                    next(record.table_name for record in st.session_state.dataset_catalog.profile.datasets
+                         if record.dataset_id == st.session_state.catalog_selected_dataset)
+                    if st.session_state.dataset_catalog is not None else None
+                ),
             )
             if not auto_charts:
                 st.caption("Fewer than 2 rows or no visualizable columns found in the dataset.")
@@ -807,7 +935,7 @@ def _display_explore_dataset() -> None:
                                     m_cols[m_idx].metric(label=m["label"], value=m["value"])
 
                             st.plotly_chart(
-                                chart_info["figure"],
+                                _style_plotly_figure(chart_info["figure"]),
                                 use_container_width=True,
                                 key=f"auto_chart_{chart_info['id']}_{idx}",
                             )
@@ -933,7 +1061,7 @@ def _display_explore_dataset() -> None:
                         m_cols = st.columns(len(cust_metrics))
                         for m_idx, m in enumerate(cust_metrics):
                             m_cols[m_idx].metric(label=m["label"], value=m["value"])
-                    st.plotly_chart(fig, use_container_width=True, key="explore_custom_plotly")
+                    st.plotly_chart(_style_plotly_figure(fig), use_container_width=True, key="explore_custom_plotly")
                 else:
                     st.info("Select suitable columns above to render your visualization.")
             else:
@@ -1266,6 +1394,109 @@ def _display_analysis_result() -> None:
     display_analysis_result(st.session_state.last_result, chart_renderer=_display_chart)
 
 
+def _render_dataset_workspace() -> None:
+    """Prominent upload and relationship controls shared by both workflows."""
+    st.subheader("Your dataset workspace")
+
+    st.caption(
+        "Upload CSV, XLSX, TXT or PDF files. Confirm suggested relationships before asking for joins."
+    )
+    st.caption("Questions, schema samples, and bounded result rows may be sent to Gemini.")
+
+    uploaded_file = st.file_uploader(
+        "Upload CSV, XLSX, TXT or PDF files",
+        type=["csv", "xlsx", "txt", "pdf"],
+        accept_multiple_files=True,
+        key=f"csv_uploader_{st.session_state.uploader_key_version}",
+        help=(
+            f"Maximum upload size: "
+            f"{config.max_upload_size_mb} MB"
+        ),
+    )
+
+    # Streamlit returns a list for multi-file mode. Tests and older
+    # adapters may return one UploadedFile, so normalize both.
+    uploaded_files = uploaded_file if isinstance(uploaded_file, list) else ([uploaded_file] if uploaded_file is not None else [])
+
+    inspected = None
+    if uploaded_files:
+        try:
+            inspected = _inspect_format_files(uploaded_files)
+            current_upload_signature = (
+                tuple(_uploaded_file_signature(item) for item in uploaded_files)
+                + tuple((index, tuple(sheets)) for index, (_, _, kind, sheets)
+                        in enumerate(inspected) if kind == "xlsx")
+            )
+            if (current_upload_signature != st.session_state.uploaded_file_signature
+                    and current_upload_signature != st.session_state.failed_upload_signature):
+                if _uses_original_csv_path(inspected):
+                    if len(uploaded_files) == 1:
+                        _load_uploaded_file(uploaded_files[0], current_upload_signature)
+                    else:
+                        _load_multiple_files(uploaded_files, current_upload_signature)
+                else:
+                    _load_format_files(inspected, current_upload_signature)
+        except (ValueError, DatasetResourceError, DataLoaderError) as exc:
+            st.session_state.upload_error = True
+            st.error(f"Could not inspect the selected file: {exc}")
+        except Exception:
+            st.session_state.upload_error = True
+            logger.exception("Unexpected upload inspection error")
+            st.error("Could not inspect the selected file. Check its contents and retry.")
+
+    if st.session_state.upload_error and uploaded_files and inspected is not None:
+        if st.button("Retry selected upload", use_container_width=True):
+            if _uses_original_csv_path(inspected) and len(uploaded_files) == 1:
+                _load_uploaded_file(uploaded_files[0], current_upload_signature)
+            elif _uses_original_csv_path(inspected):
+                _load_multiple_files(uploaded_files, current_upload_signature)
+            else:
+                _load_format_files(inspected, current_upload_signature)
+    if not uploaded_files:
+        st.session_state.upload_error = False
+        st.session_state.failed_upload_signature = None
+
+    status_label, status_modifier, _ = _workspace_status()
+    filename = html.escape(
+        str(st.session_state.uploaded_filename or "No dataset loaded")
+    )
+    st.html(
+        f"""
+        <div class="sidebar-status {status_modifier}">
+            <span class="sidebar-status-dot"></span>
+            <span>{status_label} · {filename}</span>
+        </div>
+        """
+    )
+
+    _render_catalog_controls()
+    def prepare_preprocessing_catalog():
+        from app.core.dataset_catalog import DatasetCatalog
+        if len(uploaded_files) != 1:
+            raise ValueError("The original CSV upload is no longer available. Upload it again.")
+        catalog = DatasetCatalog()
+        try:
+            record = catalog.add(uploaded_files[0], getattr(uploaded_files[0], "name", "dataset.csv"))
+            catalog.rename_single_table(record.dataset_id)
+            return catalog, record.dataset_id
+        except Exception:
+            catalog.close()
+            raise
+
+    render_preprocessing(prepare_preprocessing_catalog, _refresh_catalog_session,
+                         _activate_format_files)
+    _render_document_previews()
+
+    if st.button(
+        "Clear active dataset",
+        disabled=st.session_state.dataframe is None and not st.session_state.documents,
+        use_container_width=True,
+    ):
+        _clear_dataset()
+        st.rerun()
+
+
+
 def main() -> None:
     """Run the Streamlit application."""
 
@@ -1274,8 +1505,14 @@ def main() -> None:
     if not _render_public_demo_access_gate():
         return
 
+    st.title(config.app_name)
+    st.caption("Explore uploaded data, verify relationships, and turn questions into validated SQL insights.")
+    st.html('<div id="your-data"></div>')
+    with st.container(border=True):
+        _render_dataset_workspace()
+
     logger.info(
-        "AI Data Analyst Agent started | env=%s | provider=%s",
+        "QueryPilotAI started | env=%s | provider=%s",
         config.app_env,
         config.llm_provider,
     )
@@ -1286,88 +1523,9 @@ def main() -> None:
 
     with st.sidebar:
 
-        st.html(
-            """
-            <div class="sidebar-brand">
-                <div class="sidebar-mark">AI</div>
-                <div class="sidebar-brand-copy">
-                    <div class="sidebar-brand-title">Data Analyst</div>
-                    <div class="sidebar-brand-sub">Production Suite</div>
-                </div>
-            </div>
-            """
-        )
-
-        st.html('<div class="sidebar-section-label">Data</div>')
-
-        st.caption(
-            "Upload one or more CSV files. Each file stays isolated until a join is confirmed."
-        )
-
-        uploaded_file = st.file_uploader(
-            "Upload one or more CSV files",
-            type=["csv"],
-            accept_multiple_files=True,
-            key=f"csv_uploader_{st.session_state.uploader_key_version}",
-            help=(
-                f"Maximum upload size: "
-                f"{config.max_upload_size_mb} MB"
-            ),
-        )
-
-        # Streamlit returns a list for multi-file mode. Tests and older
-        # adapters may return one UploadedFile, so normalize both.
-        uploaded_files = uploaded_file if isinstance(uploaded_file, list) else ([uploaded_file] if uploaded_file is not None else [])
-
-        if uploaded_files:
-
-            current_upload_signature = tuple(_uploaded_file_signature(item) for item in uploaded_files)
-
-            if (
-                current_upload_signature
-                != st.session_state.uploaded_file_signature
-                and current_upload_signature != st.session_state.failed_upload_signature
-            ):
-
-                if len(uploaded_files) == 1:
-                    _load_uploaded_file(uploaded_files[0], upload_signature=current_upload_signature)
-                else:
-                    _load_multiple_files(uploaded_files, upload_signature=current_upload_signature)
-
-        if st.session_state.upload_error and uploaded_files:
-            if st.button("Retry selected upload", use_container_width=True):
-                if len(uploaded_files) == 1:
-                    _load_uploaded_file(uploaded_files[0], (_uploaded_file_signature(uploaded_files[0]),))
-                else:
-                    _load_multiple_files(uploaded_files, tuple(_uploaded_file_signature(item) for item in uploaded_files))
-        if not uploaded_files:
-            st.session_state.upload_error = False
-            st.session_state.failed_upload_signature = None
-
-        status_label, status_modifier, _ = _workspace_status()
-        filename = html.escape(
-            str(st.session_state.uploaded_filename or "No dataset loaded")
-        )
-        st.html(
-            f"""
-            <div class="sidebar-status {status_modifier}">
-                <span class="sidebar-status-dot"></span>
-                <span>{status_label} · {filename}</span>
-            </div>
-            """
-        )
-
-        _render_catalog_controls()
-
-        if st.button(
-            "Clear active dataset",
-            disabled=st.session_state.dataframe is None,
-            use_container_width=True,
-        ):
-            _clear_dataset()
-            st.rerun()
-
-        st.html('<div class="sidebar-section-label">Visualization</div>')
+        st.subheader("Workspace")
+        st.markdown("[Data](#your-data) · [Analysis](#analysis) · [Charts](#charts)")
+        st.caption("Visualization")
 
         chart_option = st.selectbox(
             "Chart type",
@@ -1393,7 +1551,7 @@ def main() -> None:
 
         selected_chart_type = chart_type_map[chart_option]
 
-        st.html('<div class="sidebar-section-label">Session</div>')
+        st.caption("Session")
 
         if st.button(
             "Clear follow-up context",
@@ -1407,188 +1565,15 @@ def main() -> None:
             _clear_conversation_history()
             st.rerun()
 
-        st.html('<div class="sidebar-section-label">System</div>')
-
-        st.caption(
-            f"Environment: `{config.app_env}`"
-        )
-
-        st.caption(
-            f"AI provider: `{config.llm_provider}`"
-        )
-
-    status_label, _, chip_class = _workspace_status()
-    filename = st.session_state.uploaded_filename or "No dataset loaded"
-
-    st.html(
-        f"""
-        <div class="workspace-header">
-            <div class="app-eyebrow"><span class="eyebrow-dot"></span> ANALYTICS WORKSPACE</div>
-            <div class="status-chip {chip_class}">{status_label}</div>
-        </div>
-        """
-    )
-
-    st.title(f"📊 {config.app_name}")
-
     if st.session_state.dataframe is None:
-        st.caption(
-            "Upload a CSV, ask a question in plain English, and let the "
-            "AI Data Analyst Agent plan, validate, execute, explain, and "
-            "visualize the result."
-        )
-    else:
-        st.caption(f"Active workspace · {filename}")
-
-    # ----------------------------------------------------------------------
-    # Empty state
-    # ----------------------------------------------------------------------
-
-    if st.session_state.dataframe is None:
-
-        st.info(
-            "👈 Upload a CSV file from the sidebar to begin."
-        )
-
-        # ------------------------------------------------------------------
-        # Premium hero
-        # ------------------------------------------------------------------
-
-        st.html(
-            """
-            <div class="hero-card">
-
-                <div class="hero-icon">
-                    📊
-                </div>
-
-                <div class="hero-eyebrow">
-                    AI-POWERED DATA ANALYTICS
-                </div>
-
-                <div class="hero-title">
-                    A private analytics workspace for CSV data.
-                </div>
-
-                <div class="hero-description">
-                    Load one or more datasets, ask a question in
-                    plain English, and review the insight, chart,
-                    table, and validated SQL in one dashboard.
-                </div>
-
-            </div>
-            """
-        )
-
-        # ------------------------------------------------------------------
-        # Features
-        # ------------------------------------------------------------------
-
-        st.html(
-            """
-            <div class="section-label">
-                WORKSPACE CAPABILITIES
-            </div>
-            """
-        )
-
-        feature_col1, feature_col2, feature_col3 = st.columns(3)
-
-        with feature_col1:
-
-            st.html(
-                """
-                <div class="feature-card">
-
-                    <div class="feature-icon">
-                        📂
-                    </div>
-
-                    <div class="feature-title">
-                        Understand your data
-                    </div>
-
-                    <div class="feature-text">
-                        Load CSV datasets, profile columns,
-                        inspect data types, and preview your data.
-                    </div>
-
-                </div>
-                """
-            )
-
-        with feature_col2:
-
-            st.html(
-                """
-                <div class="feature-card">
-
-                    <div class="feature-icon">
-                        🤖
-                    </div>
-
-                    <div class="feature-title">
-                        Ask questions naturally
-                    </div>
-
-                    <div class="feature-text">
-                        Ask questions in plain English and let
-                        Gemini translate them into SQL.
-                    </div>
-
-                </div>
-                """
-            )
-
-        with feature_col3:
-
-            st.html(
-                """
-                <div class="feature-card">
-
-                    <div class="feature-icon">
-                        🛡️
-                    </div>
-
-                    <div class="feature-title">
-                        Analyze safely
-                    </div>
-
-                    <div class="feature-text">
-                        Validate generated SQL, execute safe
-                        queries through DuckDB, and return results.
-                    </div>
-
-                </div>
-                """
-            )
-
-        # ------------------------------------------------------------------
-        # Technology strip
-        # ------------------------------------------------------------------
-
-        st.html(
-            """
-            <div class="info-strip">
-                <span>
-                    Secure SQL validation · DuckDB execution · Gemini planning
-                </span>
-            </div>
-            """
-        )
-
-        # ------------------------------------------------------------------
-        # Footer
-        # ------------------------------------------------------------------
-
-        st.html(
-            """
-            <div class="app-footer">
-                Upload a dataset from the sidebar to open the analyst workspace.
-            </div>
-            """
-        )
-
+        if any(document.get("format") == "pdf" for document in st.session_state.documents):
+            st.info("PDF text preview is available above. Add a table to ask data questions.")
+        elif st.session_state.documents:
+            st.info("TXT document preview is available above. Add a table to ask data questions.")
+        elif st.session_state.pdf_notices or st.session_state.pdf_page_errors:
+            st.info("No queryable table was extracted from this PDF.")
+        elif not st.session_state.upload_error:
+            st.info("Upload a CSV, XLSX, TXT or PDF file above to begin, or select multiple files to build a connected workspace.")
         return
 
     # ----------------------------------------------------------------------
@@ -1602,12 +1587,6 @@ def main() -> None:
     _display_dataset_overview()
 
     # ----------------------------------------------------------------------
-    # Explore Dataset
-    # ----------------------------------------------------------------------
-
-    _display_explore_dataset()
-
-    # ----------------------------------------------------------------------
     # Natural-language question
     # ----------------------------------------------------------------------
 
@@ -1619,7 +1598,8 @@ def main() -> None:
         """
     )
 
-    composer_col, context_col = st.columns((2.2, 1), gap="large")
+    st.html('<div id="analysis"></div>')
+    composer_col, context_col = st.columns((2.2, 1), gap="medium")
 
     with composer_col:
         with st.container(border=True):
@@ -1640,7 +1620,7 @@ def main() -> None:
 
             suggestions = _get_suggested_questions(st.session_state.dataset_profile)
             if suggestions:
-                st.html('<div class="suggested-prompts-header">⚡ Suggested Questions</div>')
+                st.html('<div class="suggested-prompts-header">Suggested Questions</div>')
                 sug_cols = st.columns(len(suggestions))
                 for idx, sug in enumerate(suggestions):
                     with sug_cols[idx]:
@@ -1654,7 +1634,7 @@ def main() -> None:
                         )
 
             analyze_clicked = st.button(
-                "🚀 Analyze",
+                "Analyze question",
                 type="primary",
                 use_container_width=True,
             )
@@ -1686,11 +1666,13 @@ def main() -> None:
             )
 
         else:
-
+            previous_history = len(st.session_state.conversation_history)
             _run_analysis(
                 question=question.strip(),
                 chart_type=selected_chart_type,
             )
+            if len(st.session_state.conversation_history) > previous_history:
+                st.rerun()
 
     # ----------------------------------------------------------------------
     # Latest result
@@ -1698,17 +1680,11 @@ def main() -> None:
 
     _display_analysis_result()
 
-    # ----------------------------------------------------------------------
-    # Footer
-    # ----------------------------------------------------------------------
+    # Keep the question and latest result ahead of optional dataset exploration.
+    st.html('<div id="charts"></div>')
+    _display_explore_dataset()
 
-    st.html(
-        """
-        <div class="app-footer">
-            AI Data Analyst Agent · Secure SQL · DuckDB · Gemini
-        </div>
-        """
-    )
+
 
 
 # --------------------------------------------------------------------------

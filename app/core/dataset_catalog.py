@@ -21,8 +21,10 @@ import duckdb
 from app.config import config
 from app.core.disk_dataset import DiskDataset, _BoundedConnection, disk_budget
 from app.core.sql_executor import SQLExecutor
+from app.core.data_profiler import profile_dataframe
 from app.models.schemas import CatalogProfile, DatasetMetadata, RelationshipSuggestion
-from app.utils.dataset_resources import DatasetResourceError
+from app.preprocessing.change_report import audit_values
+from app.utils.dataset_resources import DatasetResourceError, check_dataframe_limits
 from app.utils.temporary_storage import runtime_directory
 
 
@@ -121,6 +123,21 @@ class DatasetCatalog:
         key = (left_table, left_column, right_table, right_column)
         if not any((r.left_table, r.left_column, r.right_table, r.right_column) == key for r in self._relationships()):
             raise ValueError("unknown relationship suggestion")
+        if status == "confirmed":
+            # Sampled profile unique counts cannot prove join cardinality.
+            # Check actual stored keys before accepting the relationship.
+            conn = duckdb.connect(str(self.path), read_only=True)
+            try:
+                unique_sides = []
+                for table, column in ((left_table, left_column), (right_table, right_column)):
+                    count, distinct, nonnull = conn.execute(
+                        f"SELECT COUNT(*), COUNT(DISTINCT {_quote(column)}), COUNT({_quote(column)}) FROM {_quote(table)}"
+                    ).fetchone()
+                    unique_sides.append(count == distinct == nonnull)
+                if not any(unique_sides):
+                    raise ValueError("This relationship is many-to-many or has no complete unique key. Choose a lookup with one non-null row per key to avoid duplicated totals.")
+            finally:
+                conn.close()
         self._relationship_status[key] = status
 
     def add(self, upload, filename: str | None = None, progress=None) -> DatasetMetadata:
@@ -181,6 +198,14 @@ class DatasetCatalog:
             record = self._records.pop(dataset_id, None)
             if record is None:
                 return
+            if not record.table_name.endswith("_processed"):
+                for child in list(self._records.values()):
+                    if child.table_name == f"{record.table_name}_processed":
+                        self.remove(child.dataset_id)
+            self._relationship_status = {
+                key: status for key, status in self._relationship_status.items()
+                if record.table_name not in (key[0], key[2])
+            }
             conn = duckdb.connect(str(self.path))
             try:
                 conn.execute(f"DROP TABLE {_quote(record.table_name)}")
@@ -202,6 +227,84 @@ class DatasetCatalog:
         replacement = self.add(upload, filename=filename, progress=progress)
         self.remove(dataset_id)
         return replacement
+
+    def rename_single_table(self, dataset_id: str) -> None:
+        """Keep the original single-CSV SQL name when it enters the catalog."""
+        with self._lock:
+            if len(self._records) != 1 or dataset_id not in self._records:
+                raise ValueError("Only a single original table can be renamed.")
+            record = self._records[dataset_id]
+            conn = duckdb.connect(str(self.path))
+            try:
+                conn.execute(f"ALTER TABLE {_quote(record.table_name)} RENAME TO dataset")
+            finally:
+                conn.close()
+            record.table_name = "dataset"
+
+    def read_table(self, dataset_id: str):
+        record = self._records.get(dataset_id)
+        if record is None:
+            raise ValueError("Unknown dataset.")
+        conn = duckdb.connect(str(self.path), read_only=True)
+        try:
+            frame = conn.execute(
+                f"SELECT * FROM {_quote(record.table_name)} LIMIT {config.max_dataset_rows + 1}"
+            ).df()
+            check_dataframe_limits(frame)
+            return frame
+        finally:
+            conn.close()
+
+    def _write_processed(self, source, table_name, frame, report):
+        conn = duckdb.connect(str(self.path))
+        try:
+            conn.execute(f"SET memory_limit='{config.duckdb_memory_limit}'")
+            conn.execute(f"SET threads={config.duckdb_thread_limit}")
+            conn.execute("SET temp_directory=''")
+            conn.execute("SET enable_external_access=false")
+            conn.register("processed_input", frame)
+            conn.execute("BEGIN")
+            try:
+                conn.execute(f"CREATE OR REPLACE TABLE {_quote(table_name)} AS SELECT * FROM processed_input")
+                conn.execute("CREATE TABLE IF NOT EXISTS preprocessing_runs (run_id VARCHAR, dataset_id VARCHAR, original_table VARCHAR, processed_table VARCHAR, selected_operations VARCHAR, score_before DOUBLE, score_after DOUBLE, original_rows BIGINT, processed_rows BIGINT, change_summary VARCHAR, processed_at VARCHAR)")
+                conn.execute("INSERT INTO preprocessing_runs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                             audit_values(source.dataset_id, source.table_name, table_name, report))
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
+        finally:
+            conn.close()
+
+    def register_processed(self, original_id: str, frame, report):
+        with self._lock:
+            source = self._records.get(original_id)
+            if source is None or source.table_name.endswith("_processed"):
+                raise ValueError("Select an original dataset to preprocess.")
+            reserved_bytes = check_dataframe_limits(frame)
+            if not len(frame.columns):
+                raise ValueError("A processed table needs at least one column.")
+            reservation = disk_budget.reserve(max(1024**2, reserved_bytes * 2))
+            table_name = f"{source.table_name}_processed"
+            try:
+                profile = profile_dataframe(frame)
+                self._write_processed(source, table_name, frame, report)
+            except Exception:
+                reservation.release()
+                raise
+            old = next((item for item in self._records.values() if item.table_name == table_name), None)
+            if old is not None:
+                self._records.pop(old.dataset_id)
+                self._reservations.pop(old.dataset_id).release()
+            self._relationship_status = {key: value for key, value in self._relationship_status.items()
+                                         if table_name not in (key[0], key[2])}
+            record = DatasetMetadata(dataset_id=str(uuid.uuid4()),
+                                     filename=f"{source.filename} (processed)", table_name=table_name,
+                                     uploaded_at=datetime.now(timezone.utc).isoformat(),
+                                     row_count=len(frame), profile=profile)
+            self._records[record.dataset_id] = record
+            self._reservations[record.dataset_id] = reservation
+            return record
 
     def acquire(self) -> None:
         with self._lock:
@@ -255,6 +358,21 @@ class CatalogSQLExecutor(SQLExecutor):
     @property
     def table_names(self) -> list[str]:
         return list(self._table_names)
+
+    def execute(self, validation):
+        from app.core.join_validation import check_catalog_joins
+        from app.core.sql_executor import QueryExecutionError
+        from app.models.schemas import ValidationResult
+        from app.utils.security import validate_sql
+        if not isinstance(validation, ValidationResult) or not validation.is_valid or not validation.cleaned_sql:
+            raise QueryExecutionError("A valid SQL validation result is required.")
+        # Recheck the current catalog at the execution boundary, including
+        # relationship revocation since the plan was generated.
+        checked = validate_sql(validation.cleaned_sql, self.table_names, self._max_result_rows)
+        if not checked.is_valid:
+            raise QueryExecutionError("The query no longer passes catalog SQL validation.")
+        check_catalog_joins(checked.cleaned_sql, self._catalog.profile)
+        return super().execute(checked)
 
     def _release_catalog(self) -> None:
         if not self._released:

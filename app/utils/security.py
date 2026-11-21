@@ -50,6 +50,9 @@ _ALLOWED_ROOT_TYPES = (
 # ---------------------------------------------------------------------------
 
 _ALLOWED_FUNCTIONS = {
+    # Window
+    "ROW_NUMBER",
+
     # Aggregations
     "SUM",
     "AVG",

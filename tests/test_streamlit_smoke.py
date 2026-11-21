@@ -17,8 +17,11 @@ def test_initial_streamlit_screen_renders_without_errors() -> None:
 
     assert not app.exception
     assert len(app.title) == 1
-    assert app.title[0].value == "📊 AI Data Analyst Agent"
+    assert app.title[0].value == "QueryPilotAI"
     assert len(app.info) == 1
-    assert "Upload a CSV file" in app.info[0].value
+    assert "Upload a CSV, XLSX, TXT or PDF file" in app.info[0].value
     assert len(app.text_area) == 0
     assert len(app.button) >= 2
+    rendered = " ".join(item.value for item in app.markdown)
+    assert "Python executable:" not in rendered
+    assert "Pip show output:" not in rendered

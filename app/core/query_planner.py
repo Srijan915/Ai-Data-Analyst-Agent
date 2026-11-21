@@ -1,5 +1,5 @@
 """
-Natural-language query planner for the AI Data Analyst Agent.
+Natural-language query planner for QueryPilotAI.
 
 Converts a user's natural-language analytical question into exactly one
 DuckDB-compatible SQL SELECT statement through the LLMClient interface.
@@ -240,7 +240,7 @@ class QueryPlanner:
             conversation_context
         )
 
-        return f"""
+        prompt = f"""
 Dataset information:
 
 {profile_json}
@@ -407,6 +407,12 @@ entity/category and calculate the requested aggregate.
 
 Return ONLY the SQL SELECT statement.
 """.strip()
+        if is_catalog:
+            # The examples must not introduce a nonexistent physical `dataset`
+            # table into a catalog planning request.
+            first_table = dataset_profile.datasets[0].table_name if dataset_profile.datasets else "NO_TABLE_AVAILABLE"
+            prompt = prompt.replace('FROM "dataset"', 'FROM "' + first_table.replace('"', '""') + '"')
+        return prompt
 
     @staticmethod
     def _format_conversation_context(
